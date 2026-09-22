@@ -1,15 +1,16 @@
 #![warn(clippy::pedantic)]
 
 use bon::bon;
+use reqwest::{Client, ClientBuilder};
 use serde_json::Value;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
-trait ChatServer {
+pub trait ChatServer {
     fn complete(&self, messages: &[Message]) -> Result<Message>;
 }
 
-enum Message {
+pub enum Message {
     Text {
         role: String,
         content: String,
@@ -27,6 +28,7 @@ enum Message {
 }
 
 pub struct OpenAICompatChatServer {
+    client: Client,
     base_url: String,
     api_key: Option<String>,
 }
@@ -35,7 +37,9 @@ pub struct OpenAICompatChatServer {
 impl OpenAICompatChatServer {
     #[builder]
     pub fn new(base_url: &str, api_key: Option<&str>) -> Self {
+        let client = Client::builder().build().unwrap();
         Self {
+            client,
             base_url: base_url.to_owned(),
             api_key: api_key.map(ToOwned::to_owned),
         }
