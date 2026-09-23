@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 
 use snafu::ResultExt;
+use tracing::{Level, event};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -56,10 +57,12 @@ async fn main() -> Result<()> {
         content: "Hello there".to_owned(),
     }];
 
-    server
+    let msg = server
         .complete(&messages)
         .await
         .with_whatever_context(|_| "complete")?;
+
+    event!(Level::INFO, "msg = {:?}", msg);
 
     Ok(())
 }

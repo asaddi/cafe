@@ -3,7 +3,7 @@
 use bon::bon;
 use reqwest::{Client, RequestBuilder};
 use serde_json::{Value, json};
-use snafu::ResultExt;
+use snafu::{FromString, Whatever, prelude::*};
 use tracing::{Level, event};
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
@@ -12,6 +12,7 @@ pub trait ChatServer {
     async fn complete(&self, messages: &[Message]) -> Result<Message>;
 }
 
+#[derive(Debug)]
 pub enum Message {
     Text {
         role: String,
@@ -111,11 +112,31 @@ impl ChatServer for OpenAICompatChatServer {
             .await
             .with_whatever_context(|_| "POST /chat/completions")?;
 
-        event!(Level::INFO, "response = {response_json}");
+        event!(Level::TRACE, "response_json = {response_json}");
+
+        // TODO Lots of assumptions here
+        let response_msg = response_json
+            .get("choices")
+            .and_then(|c| {
+                c.as_array()
+                    .and_then(|a| a.first().and_then(|f| f.get("message")))
+            })
+            .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
+
+        event!(Level::DEBUG, "response_msg = {}", response_msg);
+
+        let role = response_msg
+            .get("role")
+            .and_then(|r| r.as_str())
+            .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
+        let content = response_msg
+            .get("content")
+            .and_then(|r| r.as_str())
+            .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
         Ok(Message::Text {
-            role: "assistant".to_owned(),
-            content: "Hello there".to_owned(),
+            role: role.to_owned(),
+            content: content.to_owned(),
         })
     }
 }
