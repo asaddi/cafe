@@ -1,5 +1,7 @@
 #![warn(clippy::pedantic)]
 
+use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
+
 use bon::bon;
 use reqwest::{Client, RequestBuilder};
 use serde_json::{Value, json};
@@ -8,8 +10,13 @@ use tracing::{Level, event};
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
+pub trait ChatHistory: Any {
+    fn add_message(&self, message: Message) -> Result<()>;
+    fn as_any(&self) -> &dyn Any;
+}
+
 pub trait ChatServer {
-    async fn complete(&self, messages: &[Message]) -> Result<Message>;
+    async fn complete(&self, messages: Rc<dyn ChatHistory>) -> Result<Message>;
 }
 
 #[derive(Debug, Clone)]
@@ -100,13 +107,47 @@ impl OpenAICompatChatServer {
     }
 }
 
-impl ChatServer for OpenAICompatChatServer {
-    async fn complete(&self, messages: &[Message]) -> Result<Message> {
-        let mut messages_json: Vec<Value> = Vec::new();
-        for msg in messages {
-            messages_json.push(Self::to_json(msg));
+#[derive(Debug)]
+pub struct OpenAICompatChatHistory {
+    messages: RefCell<Vec<Value>>,
+}
+
+impl OpenAICompatChatHistory {
+    pub fn new() -> Self {
+        Self {
+            messages: RefCell::new(Vec::new()),
         }
-        let request_json = json!({"model":&self.model,"messages":messages_json});
+    }
+}
+
+impl ChatHistory for OpenAICompatChatHistory {
+    fn add_message(&self, message: Message) -> Result<()> {
+        let msg = match message {
+            Message::Text(payload) => {
+                json!({
+                    "role":payload.role,
+                    "content":payload.content
+                })
+            }
+            _ => todo!(),
+        };
+        self.messages.borrow_mut().push(msg);
+        Ok(())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl ChatServer for OpenAICompatChatServer {
+    async fn complete(&self, messages: Rc<dyn ChatHistory>) -> Result<Message> {
+        let my_hist = messages
+            .as_any()
+            .downcast_ref::<OpenAICompatChatHistory>()
+            .unwrap();
+
+        let request_json = json!({"model":&self.model,"messages":&my_hist.messages});
         let response = self
             .client
             .post(Self::endpoint(&self.base_url, "/chat/completions"))
@@ -133,6 +174,8 @@ impl ChatServer for OpenAICompatChatServer {
             .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
         event!(Level::DEBUG, "response_msg = {}", response_msg);
+
+        my_hist.messages.borrow_mut().push(response_msg.clone());
 
         let role = response_msg
             .get("role")

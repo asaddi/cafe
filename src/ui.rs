@@ -1,11 +1,15 @@
 #![warn(clippy::pedantic)]
 
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    rc::Rc,
+    sync::Arc,
+};
 
 use snafu::ResultExt;
 use tracing::{Level, event};
 
-use crate::chat::{ChatServer, Message, TextPayload};
+use crate::chat::{ChatHistory, ChatServer, Message, OpenAICompatChatHistory, TextPayload};
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
@@ -13,11 +17,13 @@ pub async fn main_loop<S>(server: &S) -> Result<()>
 where
     S: ChatServer,
 {
-    let mut history: Vec<Message> = Vec::new();
+    let history = Rc::new(OpenAICompatChatHistory::new());
 
     // TODO add system message
 
     loop {
+        let my_hist = history.clone();
+
         print!("U> ");
         io::stdout().flush().whatever_context("flush")?;
 
@@ -36,15 +42,15 @@ where
             continue;
         }
 
-        history.push(Message::Text(TextPayload {
+        my_hist.add_message(Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
-        }));
+        }))?;
 
         event!(Level::DEBUG, "history = {:?}", history);
 
         let msg = server
-            .complete(&history)
+            .complete(my_hist)
             .await
             .whatever_context("complete")?;
 
@@ -52,7 +58,6 @@ where
 
         match msg {
             Message::Text(payload) => {
-                history.push(Message::Text(payload.clone()));
                 println!("A> {}", payload.content);
             }
             Message::FunctionCall(payload) => {
