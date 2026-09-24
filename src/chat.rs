@@ -11,7 +11,10 @@ use tracing::{Level, event};
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
 pub trait ChatHistory: Any {
+    // Note: Expects interior mutability
     fn add_message(&self, message: Message) -> Result<()>;
+
+    // To allow downcasting into specific impls
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -133,7 +136,9 @@ impl ChatServer for OpenAICompatChatServer {
         let my_hist = messages
             .as_any()
             .downcast_ref::<OpenAICompatChatHistory>()
-            .unwrap();
+            .ok_or_else(|| {
+                Whatever::without_source("must use OpenAICompatChatHistory".to_string())
+            })?;
 
         let request_json = json!({"model":&self.model,"messages":&my_hist.messages});
         let response = self
