@@ -1,13 +1,12 @@
 #![warn(clippy::pedantic)]
 
-use snafu::ResultExt;
-use tracing::{Level, event};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::chat::{ChatServer, Message};
+use crate::ui::main_loop;
 
 mod chat;
+mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
@@ -52,17 +51,5 @@ async fn main() -> Result<()> {
         .model("whatever")
         .build();
 
-    let messages = [Message::Text {
-        role: "user".to_owned(),
-        content: "Hello there".to_owned(),
-    }];
-
-    let msg = server
-        .complete(&messages)
-        .await
-        .with_whatever_context(|_| "complete")?;
-
-    event!(Level::INFO, "msg = {:?}", msg);
-
-    Ok(())
+    main_loop(&server).await
 }
