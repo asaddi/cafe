@@ -12,7 +12,7 @@ pub trait ChatServer {
     async fn complete(&self, messages: &[Message]) -> Result<Message>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TextPayload {
     pub role: String,
     pub content: String,

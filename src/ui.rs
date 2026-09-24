@@ -13,24 +13,38 @@ pub async fn main_loop<S>(server: &S) -> Result<()>
 where
     S: ChatServer,
 {
+    let mut history: Vec<Message> = Vec::new();
+
+    // TODO add system message
+
     loop {
         print!("U> ");
         io::stdout().flush().whatever_context("flush")?;
 
         let mut input = String::new();
-        io::stdin()
+        let len = io::stdin()
             .read_line(&mut input)
             .whatever_context("read_line")?;
 
+        if len == 0 {
+            break Ok(());
+        }
+
         let input = input.trim();
 
-        let messages = [Message::Text(TextPayload {
+        if input.is_empty() {
+            continue;
+        }
+
+        history.push(Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
-        })];
+        }));
+
+        event!(Level::DEBUG, "history = {:?}", history);
 
         let msg = server
-            .complete(&messages)
+            .complete(&history)
             .await
             .whatever_context("complete")?;
 
@@ -38,6 +52,7 @@ where
 
         match msg {
             Message::Text(payload) => {
+                history.push(Message::Text(payload.clone()));
                 println!("A> {}", payload.content);
             }
             Message::FunctionCall(payload) => {
