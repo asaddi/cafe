@@ -13,21 +13,30 @@ pub trait ChatServer {
 }
 
 #[derive(Debug)]
+pub struct TextPayload {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug)]
+pub struct FunctionCallPayload {
+    pub id: String,
+    pub name: String,
+    pub arguments: Value,
+}
+
+#[derive(Debug)]
+pub struct FunctionCallResultPayload {
+    pub id: String,
+    pub name: String,
+    pub result: String,
+}
+
+#[derive(Debug)]
 pub enum Message {
-    Text {
-        role: String,
-        content: String,
-    },
-    FunctionCall {
-        id: String,
-        name: String,
-        arguments: Value,
-    },
-    FunctionCallResult {
-        id: String,
-        name: String,
-        result: String,
-    },
+    Text(TextPayload),
+    FunctionCall(FunctionCallPayload),
+    FunctionCallResult(FunctionCallResultPayload),
 }
 
 pub struct OpenAICompatChatServer {
@@ -80,10 +89,10 @@ impl OpenAICompatChatServer {
 
     fn to_json(message: &Message) -> Value {
         match message {
-            Message::Text { role, content } => {
+            Message::Text(payload) => {
                 json!({
-                    "role":role,
-                    "content":content
+                    "role":payload.role,
+                    "content":payload.content
                 })
             }
             _ => panic!("not yet implemented"),
@@ -134,9 +143,9 @@ impl ChatServer for OpenAICompatChatServer {
             .and_then(|r| r.as_str())
             .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
-        Ok(Message::Text {
+        Ok(Message::Text(TextPayload {
             role: role.to_owned(),
             content: content.to_owned(),
-        })
+        }))
     }
 }

@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use snafu::ResultExt;
 use tracing::{Level, event};
 
-use crate::chat::{ChatServer, Message};
+use crate::chat::{ChatServer, Message, TextPayload};
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
@@ -14,7 +14,7 @@ where
     S: ChatServer,
 {
     loop {
-        print!("     User> ");
+        print!("U> ");
         io::stdout().flush().whatever_context("flush")?;
 
         let mut input = String::new();
@@ -24,10 +24,10 @@ where
 
         let input = input.trim();
 
-        let messages = [Message::Text {
+        let messages = [Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
-        }];
+        })];
 
         let msg = server
             .complete(&messages)
@@ -37,13 +37,16 @@ where
         event!(Level::DEBUG, "msg = {:?}", msg);
 
         match msg {
-            Message::Text {
-                role: _,
-                content: out,
-            } => {
-                println!("Assistant> {out}");
+            Message::Text(payload) => {
+                println!("A> {}", payload.content);
             }
-            _ => todo!(),
+            Message::FunctionCall(payload) => {
+                event!(Level::DEBUG, "payload = {:?}", payload);
+                todo!();
+            }
+            Message::FunctionCallResult(_) => {
+                panic!()
+            }
         }
     }
 }
