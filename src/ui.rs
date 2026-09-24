@@ -3,7 +3,6 @@
 use std::{
     io::{self, Write},
     rc::Rc,
-    sync::Arc,
 };
 
 use snafu::ResultExt;

@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic)]
 
-use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
+use std::{any::Any, cell::RefCell, rc::Rc};
 
 use bon::bon;
 use reqwest::{Client, RequestBuilder};
@@ -92,18 +92,6 @@ impl OpenAICompatChatServer {
     // TODO Or maybe this should be in ChatServer?
     pub fn set_model(&mut self, model: &str) {
         self.model.clone_from(&model.to_owned());
-    }
-
-    fn to_json(message: &Message) -> Value {
-        match message {
-            Message::Text(payload) => {
-                json!({
-                    "role":payload.role,
-                    "content":payload.content
-                })
-            }
-            _ => panic!("not yet implemented"),
-        }
     }
 }
 
