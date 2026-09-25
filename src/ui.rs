@@ -41,6 +41,8 @@ where
             continue;
         }
 
+        println!();
+
         my_hist.add_message(Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
@@ -58,6 +60,7 @@ where
         match msg {
             Message::Text(payload) => {
                 println!("A> {}", payload.content);
+                println!();
             }
             Message::FunctionCall(payload) => {
                 event!(Level::DEBUG, "payload = {:?}", payload);
