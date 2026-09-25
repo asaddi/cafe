@@ -105,6 +105,19 @@ impl OpenAICompatChatServer {
     pub fn set_model(&mut self, model: &str) {
         self.model.clone_from(&model.to_owned());
     }
+
+    fn tools_to_json(tools: &[ToolDefinition]) -> Value {
+        let mut tools_json: Vec<Value> = Vec::new();
+        for tool in tools {
+            tools_json.push(json!({
+                "type":"function",
+                "name":&tool.name,
+                "description":&tool.description,
+                "parameters":&tool.parameters,
+            }));
+        }
+        json!(tools_json)
+    }
 }
 
 #[derive(Debug)]
@@ -144,7 +157,7 @@ impl ChatServer for OpenAICompatChatServer {
     async fn complete(
         &self,
         messages: Rc<dyn ChatHistory>,
-        _tools: &[ToolDefinition],
+        tools: &[ToolDefinition],
     ) -> Result<Message> {
         let my_hist = messages
             .as_any()
@@ -153,7 +166,12 @@ impl ChatServer for OpenAICompatChatServer {
                 Whatever::without_source("must use OpenAICompatChatHistory".to_string())
             })?;
 
-        let request_json = json!({"model":&self.model,"messages":&my_hist.messages});
+        let tools_json = Self::tools_to_json(tools);
+        let request_json = json!({
+            "model":&self.model,
+            "messages":&my_hist.messages,
+            "tools":tools_json
+        });
         let response = self
             .client
             .post(Self::endpoint(&self.base_url, "/chat/completions"))

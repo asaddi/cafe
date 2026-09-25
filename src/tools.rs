@@ -1,10 +1,10 @@
 use serde_json::Value;
 
 pub struct ToolDefinition {
-    name: String,
-    description: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
     // TODO Will be lazy for now and just represent entire JSON-schema as JSON
-    parameters: Option<Value>,
+    pub parameters: Option<Value>,
     // strict? Will most likely always be enabled.
 }
 
