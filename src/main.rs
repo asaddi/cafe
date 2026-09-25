@@ -6,6 +6,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 use crate::ui::main_loop;
 
 mod chat;
+mod tools;
 mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;

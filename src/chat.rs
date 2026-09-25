@@ -1,5 +1,3 @@
-#![warn(clippy::pedantic)]
-
 use std::{any::Any, cell::RefCell, rc::Rc};
 
 use bon::bon;
@@ -7,6 +5,8 @@ use reqwest::{Client, RequestBuilder};
 use serde_json::{Value, json};
 use snafu::{FromString, Whatever, prelude::*};
 use tracing::{Level, event};
+
+use crate::tools::ToolDefinition;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
@@ -19,7 +19,11 @@ pub trait ChatHistory: Any {
 }
 
 pub trait ChatServer {
-    async fn complete(&self, messages: Rc<dyn ChatHistory>) -> Result<Message>;
+    async fn complete(
+        &self,
+        messages: Rc<dyn ChatHistory>,
+        tools: &[ToolDefinition],
+    ) -> Result<Message>;
 }
 
 #[derive(Debug, Clone)]
@@ -137,7 +141,11 @@ impl ChatHistory for OpenAICompatChatHistory {
 }
 
 impl ChatServer for OpenAICompatChatServer {
-    async fn complete(&self, messages: Rc<dyn ChatHistory>) -> Result<Message> {
+    async fn complete(
+        &self,
+        messages: Rc<dyn ChatHistory>,
+        _tools: &[ToolDefinition],
+    ) -> Result<Message> {
         let my_hist = messages
             .as_any()
             .downcast_ref::<OpenAICompatChatHistory>()

@@ -1,5 +1,3 @@
-#![warn(clippy::pedantic)]
-
 use std::{
     io::{self, Write},
     rc::Rc,
@@ -19,6 +17,8 @@ where
     let history = Rc::new(OpenAICompatChatHistory::new());
 
     // TODO add system message
+
+    let tools = vec![];
 
     loop {
         let my_hist = history.clone();
@@ -51,7 +51,7 @@ where
         event!(Level::DEBUG, "history = {:?}", history);
 
         let msg = server
-            .complete(my_hist)
+            .complete(my_hist, &tools)
             .await
             .whatever_context("complete")?;
 
