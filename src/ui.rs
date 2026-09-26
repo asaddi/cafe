@@ -3,17 +3,27 @@ use std::{
     rc::Rc,
 };
 
+use serde_json::json;
 use snafu::ResultExt;
 use tracing::{Level, event};
 
 use crate::{
-    chat::{ChatHistory, ChatServer, Message, TextPayload},
-    tools::ToolDefinition,
+    chat::{
+        ChatHistory, ChatServer, FunctionCallResultPayload,
+        Message::{self, FunctionCallResult},
+        TextPayload,
+    },
+    tools::{ToolDefinition, ToolHandler},
 };
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
-pub async fn main_loop<S, H>(server: S, history: H, tools: &[ToolDefinition]) -> Result<()>
+pub async fn main_loop<S, H>(
+    server: S,
+    history: H,
+    tools: &[ToolDefinition],
+    tool_handler: impl ToolHandler,
+) -> Result<()>
 where
     S: ChatServer,
     H: ChatHistory + std::fmt::Debug,
@@ -24,8 +34,6 @@ where
     // TODO add system message
 
     loop {
-        let my_hist = history.clone();
-
         print!("U> ");
         io::stdout().flush().whatever_context("flush")?;
 
@@ -46,33 +54,61 @@ where
 
         println!();
 
-        my_hist.add_message(Message::Text(TextPayload {
+        history.clone().add_message(Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
         }))?;
 
-        event!(Level::DEBUG, "history = {:?}", history);
+        loop {
+            event!(Level::DEBUG, "history = {:?}", history);
 
-        let results = server
-            .complete(my_hist, tools)
-            .await
-            .whatever_context("complete")?;
+            let results = server
+                .complete(history.clone(), tools)
+                .await
+                .whatever_context("complete")?;
 
-        for msg in results {
-            event!(Level::DEBUG, "msg = {:?}", msg);
+            let mut tool_called = false;
 
-            match msg {
-                Message::Text(payload) => {
-                    println!("A> {}", payload.content);
-                    println!();
+            for msg in results {
+                event!(Level::DEBUG, "msg = {:?}", msg);
+
+                if match msg {
+                    Message::Text(payload) => {
+                        println!("A> {}", payload.content);
+                        println!();
+                        false
+                    }
+                    Message::FunctionCall(payload) => {
+                        event!(Level::DEBUG, "payload = {:?}", payload);
+                        // TODO This is where we perform the function call and then
+                        // append the result back onto history
+                        let tool_result =
+                            match tool_handler.handle(&payload.name, &payload.arguments).await {
+                                Ok(result) => result,
+                                Err(e) => json!({"error":e.to_string()}),
+                            };
+                        history.clone().add_message(FunctionCallResult(
+                            FunctionCallResultPayload {
+                                id: payload.id,
+                                name: payload.name,
+                                result: tool_result.to_string(),
+                            },
+                        ))?;
+                        true
+                    }
+                    Message::FunctionCallResult(_) => {
+                        panic!()
+                    }
+                } {
+                    tool_called = true;
                 }
-                Message::FunctionCall(payload) => {
-                    event!(Level::DEBUG, "payload = {:?}", payload);
-                    todo!();
-                }
-                Message::FunctionCallResult(_) => {
-                    panic!()
-                }
+            }
+
+            // If tools were called, then history was surely altered.
+            // Re-run through the model.
+            if !tool_called {
+                // Otherwise, wait for the next user input
+                break;
             }
         }
     }

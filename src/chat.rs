@@ -6,9 +6,9 @@ use serde_json::{Value, json};
 use snafu::{FromString, Whatever, prelude::*};
 use tracing::{Level, event};
 
+use crate::Result;
+use crate::chat::Message::FunctionCall;
 use crate::tools::ToolDefinition;
-
-type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
 pub trait ChatHistory: Any {
     // Note: Expects interior mutability
@@ -144,7 +144,14 @@ impl ChatHistory for OpenAICompatChatHistory {
                     "content":payload.content
                 })
             }
-            _ => todo!(),
+            Message::FunctionCallResult(payload) => {
+                json!({
+                    "role":"tool",
+                    "tool_call_id":&payload.id,
+                    "content":&payload.result,
+                })
+            }
+            FunctionCall(_) => panic!(),
         };
         self.messages.borrow_mut().push(msg);
         Ok(())
@@ -199,22 +206,55 @@ impl ChatServer for OpenAICompatChatServer {
             })
             .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
-        event!(Level::DEBUG, "response_msg = {}", response_msg);
+        event!(
+            Level::DEBUG,
+            "response_msg = {}",
+            serde_json::to_string_pretty(response_msg).unwrap()
+        );
 
         my_hist.messages.borrow_mut().push(response_msg.clone());
 
-        let role = response_msg
-            .get("role")
-            .and_then(|r| r.as_str())
-            .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
-        let content = response_msg
-            .get("content")
-            .and_then(|r| r.as_str())
-            .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
+        if let Some(tool_calls) = response_msg.get("tool_calls").and_then(|v| v.as_array()) {
+            // For now we're assuming that if there are tool_calls, there can
+            // be no other content.
+            let mut calls = Vec::new();
+            for tc in tool_calls {
+                let call_id = tc
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Whatever::without_source("bad function call ID".to_owned()))?;
+                let name = tc
+                    .get("function")
+                    .and_then(|v| v.get("name").and_then(|v| v.as_str()))
+                    .ok_or_else(|| Whatever::without_source("bad function call name".to_owned()))?;
+                let args = tc
+                    .get("function")
+                    .and_then(|v| v.get("arguments").and_then(|v| v.as_str()))
+                    .ok_or_else(|| {
+                        Whatever::without_source("bad function call arguments".to_owned())
+                    })?;
+                let arguments: Value = serde_json::from_str(args).whatever_context("JSON parse")?;
+                calls.push(FunctionCall(FunctionCallPayload {
+                    id: call_id.to_owned(),
+                    name: name.to_owned(),
+                    arguments,
+                }));
+            }
+            Ok(calls)
+        } else {
+            let role = response_msg
+                .get("role")
+                .and_then(|r| r.as_str())
+                .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
+            let content = response_msg
+                .get("content")
+                .and_then(|r| r.as_str())
+                .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
-        Ok(vec![Message::Text(TextPayload {
-            role: role.to_owned(),
-            content: content.to_owned(),
-        })])
+            Ok(vec![Message::Text(TextPayload {
+                role: role.to_owned(),
+                content: content.to_owned(),
+            })])
+        }
     }
 }

@@ -1,5 +1,7 @@
 use serde_json::Value;
 
+use crate::Result;
+
 pub struct ToolDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -18,4 +20,10 @@ impl ToolDefinition {
             parameters,
         }
     }
+}
+
+// This is technically more of a dispatcher, but we'll go with this for
+// now.
+pub trait ToolHandler {
+    async fn handle(&self, name: &str, arguments: &Value) -> Result<Value>;
 }

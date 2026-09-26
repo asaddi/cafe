@@ -1,8 +1,9 @@
-use serde_json::json;
+use serde_json::{Number, Value, json};
+use snafu::{FromString, Whatever};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::tools::ToolDefinition;
+use crate::tools::{ToolDefinition, ToolHandler};
 use crate::ui::main_loop;
 
 mod chat;
@@ -11,7 +12,48 @@ mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
+struct MyTools;
+
+impl ToolHandler for MyTools {
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "random number generation isn't async, but this is a generic trait"
+    )]
+    async fn handle(&self, name: &str, arguments: &Value) -> Result<Value> {
+        let value = match name {
+            "roll_dice" => {
+                let faces = arguments
+                    .get("faces")
+                    .and_then(|v| v.as_number().and_then(Number::as_u64))
+                    .ok_or_else(|| {
+                        Whatever::without_source("bad argument for 'faces'".to_owned())
+                    })?;
+                let number = arguments
+                    .get("number")
+                    .and_then(|v| v.as_number().and_then(Number::as_u64))
+                    .ok_or_else(|| {
+                        Whatever::without_source("bad argument for 'number'".to_owned())
+                    })?;
+
+                let mut total: u64 = 0;
+
+                for _ in 0..number {
+                    total += rand::random_range(1..faces);
+                }
+
+                json!(total)
+            }
+            _ => {
+                unimplemented!("tool: {name}");
+            }
+        };
+
+        Ok(value)
+    }
+}
+
 #[tokio::main]
+#[snafu::report]
 async fn main() -> Result<()> {
     let fmt_layer = fmt::layer().with_target(false);
     let filter_layer = EnvFilter::try_from_default_env()
@@ -54,5 +96,5 @@ async fn main() -> Result<()> {
             .build()
     );
 
-    main_loop(server, history, &tools).await
+    main_loop(server, history, &tools, MyTools).await
 }

@@ -92,6 +92,7 @@ name = "cafe"
 version = "0.1.0"
 dependencies = [
  "bon",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",
