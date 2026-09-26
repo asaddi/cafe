@@ -1,6 +1,8 @@
+use serde_json::json;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
+use crate::tools::ToolDefinition;
 use crate::ui::main_loop;
 
 mod chat;
@@ -28,7 +30,29 @@ async fn main() -> Result<()> {
 
     let history = chat::OpenAICompatChatHistory::new();
 
-    let tools = vec![];
+    let mut tools = vec![];
+    tools.push(
+        ToolDefinition::builder()
+            .name("roll_dice")
+            .description("Roll a number of dice (with the specified number of faces), returning the total result.")
+            .parameters(json!({
+                "type":"object",
+                "properties":{
+                    "faces":{
+                        "type":"integer",
+                        "description":"The number of sides of each die, e.g. 6 is a standard six-sided die.",
+                        "minimum": 1
+                    },
+                    "number":{
+                        "type":"integer",
+                        "description":"The number of dice to roll.",
+                        "minimum": 1
+                    }
+                },
+                "required":["faces", "number"]
+            }))
+            .build()
+    );
 
     main_loop(server, history, &tools).await
 }

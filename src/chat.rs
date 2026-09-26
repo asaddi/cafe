@@ -111,9 +111,11 @@ impl OpenAICompatChatServer {
         for tool in tools {
             tools_json.push(json!({
                 "type":"function",
-                "name":&tool.name,
-                "description":&tool.description,
-                "parameters":&tool.parameters,
+                "function":{
+                    "name":&tool.name,
+                    "description":&tool.description,
+                    "parameters":&tool.parameters,
+                }
             }));
         }
         json!(tools_json)
