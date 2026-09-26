@@ -32,7 +32,6 @@ pub struct TextPayload {
     pub content: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct FunctionCallPayload {
     pub id: String,
@@ -40,10 +39,10 @@ pub struct FunctionCallPayload {
     pub arguments: Value,
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct FunctionCallResultPayload {
     pub id: String,
+    #[expect(dead_code)]
     pub name: String,
     pub result: String,
 }
@@ -51,9 +50,7 @@ pub struct FunctionCallResultPayload {
 #[derive(Debug)]
 pub enum Message {
     Text(TextPayload),
-    #[allow(dead_code)]
     FunctionCall(FunctionCallPayload),
-    #[allow(dead_code)]
     FunctionCallResult(FunctionCallResultPayload),
 }
 
@@ -101,7 +98,7 @@ impl OpenAICompatChatServer {
     }
 
     // TODO Or maybe this should be in ChatServer?
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub fn set_model(&mut self, model: &str) {
         self.model.clone_from(&model.to_owned());
     }
