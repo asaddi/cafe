@@ -53,24 +53,26 @@ where
 
         event!(Level::DEBUG, "history = {:?}", history);
 
-        let msg = server
+        let results = server
             .complete(my_hist, tools)
             .await
             .whatever_context("complete")?;
 
-        event!(Level::DEBUG, "msg = {:?}", msg);
+        for msg in results {
+            event!(Level::DEBUG, "msg = {:?}", msg);
 
-        match msg {
-            Message::Text(payload) => {
-                println!("A> {}", payload.content);
-                println!();
-            }
-            Message::FunctionCall(payload) => {
-                event!(Level::DEBUG, "payload = {:?}", payload);
-                todo!();
-            }
-            Message::FunctionCallResult(_) => {
-                panic!()
+            match msg {
+                Message::Text(payload) => {
+                    println!("A> {}", payload.content);
+                    println!();
+                }
+                Message::FunctionCall(payload) => {
+                    event!(Level::DEBUG, "payload = {:?}", payload);
+                    todo!();
+                }
+                Message::FunctionCallResult(_) => {
+                    panic!()
+                }
             }
         }
     }

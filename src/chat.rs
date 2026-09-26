@@ -23,7 +23,7 @@ pub trait ChatServer {
         &self,
         messages: Rc<dyn ChatHistory>,
         tools: &[ToolDefinition],
-    ) -> Result<Message>;
+    ) -> Result<Vec<Message>>;
 }
 
 #[derive(Debug, Clone)]
@@ -160,7 +160,7 @@ impl ChatServer for OpenAICompatChatServer {
         &self,
         messages: Rc<dyn ChatHistory>,
         tools: &[ToolDefinition],
-    ) -> Result<Message> {
+    ) -> Result<Vec<Message>> {
         let my_hist = messages
             .as_any()
             .downcast_ref::<OpenAICompatChatHistory>()
@@ -212,9 +212,9 @@ impl ChatServer for OpenAICompatChatServer {
             .and_then(|r| r.as_str())
             .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
-        Ok(Message::Text(TextPayload {
+        Ok(vec![Message::Text(TextPayload {
             role: role.to_owned(),
             content: content.to_owned(),
-        }))
+        })])
     }
 }
