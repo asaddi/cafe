@@ -1,5 +1,3 @@
-#![warn(clippy::pedantic)]
-
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
