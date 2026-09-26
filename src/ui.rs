@@ -6,19 +6,22 @@ use std::{
 use snafu::ResultExt;
 use tracing::{Level, event};
 
-use crate::chat::{ChatHistory, ChatServer, Message, OpenAICompatChatHistory, TextPayload};
+use crate::{
+    chat::{ChatHistory, ChatServer, Message, TextPayload},
+    tools::ToolDefinition,
+};
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
-pub async fn main_loop<S>(server: &S) -> Result<()>
+pub async fn main_loop<S, H>(server: S, history: H, tools: &[ToolDefinition]) -> Result<()>
 where
     S: ChatServer,
+    H: ChatHistory + std::fmt::Debug,
 {
-    let history = Rc::new(OpenAICompatChatHistory::new());
+    let server = &server;
+    let history = Rc::new(history);
 
     // TODO add system message
-
-    let tools = vec![];
 
     loop {
         let my_hist = history.clone();
@@ -51,7 +54,7 @@ where
         event!(Level::DEBUG, "history = {:?}", history);
 
         let msg = server
-            .complete(my_hist, &tools)
+            .complete(my_hist, tools)
             .await
             .whatever_context("complete")?;
 

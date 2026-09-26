@@ -26,5 +26,9 @@ async fn main() -> Result<()> {
         .model("whatever")
         .build();
 
-    main_loop(&server).await
+    let history = chat::OpenAICompatChatHistory::new();
+
+    let tools = vec![];
+
+    main_loop(server, history, &tools).await
 }
