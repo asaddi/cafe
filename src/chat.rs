@@ -159,6 +159,28 @@ impl ChatHistory for OpenAICompatChatHistory {
     }
 }
 
+mod responses {
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    pub struct ResponseText {
+        pub role: String,
+        pub content: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct ResponseToolCall {
+        pub id: String,
+        pub function: ResponseToolCallFunction,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct ResponseToolCallFunction {
+        pub name: String,
+        pub arguments: String,
+    }
+}
+
 impl ChatServer for OpenAICompatChatServer {
     async fn complete(
         &self,
@@ -196,11 +218,7 @@ impl ChatServer for OpenAICompatChatServer {
 
         // TODO Lots of assumptions here
         let response_msg = response_json
-            .get("choices")
-            .and_then(|c| {
-                c.as_array()
-                    .and_then(|a| a.first().and_then(|f| f.get("message")))
-            })
+            .pointer("/choices/0/message")
             .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
 
         event!(
@@ -211,46 +229,29 @@ impl ChatServer for OpenAICompatChatServer {
 
         my_hist.messages.borrow_mut().push(response_msg.clone());
 
-        if let Some(tool_calls) = response_msg.get("tool_calls").and_then(|v| v.as_array()) {
+        if let Some(tool_calls) = response_msg.get("tool_calls").and_then(Value::as_array) {
             // For now we're assuming that if there are tool_calls, there can
             // be no other content.
             let mut calls = Vec::new();
             for tc in tool_calls {
-                let call_id = tc
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| Whatever::without_source("bad function call ID".to_owned()))?;
-                let name = tc
-                    .get("function")
-                    .and_then(|v| v.get("name").and_then(|v| v.as_str()))
-                    .ok_or_else(|| Whatever::without_source("bad function call name".to_owned()))?;
-                let args = tc
-                    .get("function")
-                    .and_then(|v| v.get("arguments").and_then(|v| v.as_str()))
-                    .ok_or_else(|| {
-                        Whatever::without_source("bad function call arguments".to_owned())
-                    })?;
-                let arguments: Value = serde_json::from_str(args).whatever_context("JSON parse")?;
+                let decoded: responses::ResponseToolCall =
+                    serde_json::from_value(tc.clone()).whatever_context("JSON decode")?;
+                let arguments: Value = serde_json::from_str(&decoded.function.arguments)
+                    .whatever_context("JSON parse")?;
                 calls.push(FunctionCall(FunctionCallPayload {
-                    id: call_id.to_owned(),
-                    name: name.to_owned(),
+                    id: decoded.id,
+                    name: decoded.function.name,
                     arguments,
                 }));
             }
             Ok(calls)
         } else {
-            let role = response_msg
-                .get("role")
-                .and_then(|r| r.as_str())
-                .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
-            let content = response_msg
-                .get("content")
-                .and_then(|r| r.as_str())
-                .ok_or_else(|| Whatever::without_source("JSON decode".to_string()))?;
-
+            // We COULD just use TextPayload?
+            let decoded: responses::ResponseText =
+                serde_json::from_value(response_msg.clone()).whatever_context("JSON decode")?;
             Ok(vec![Message::Text(TextPayload {
-                role: role.to_owned(),
-                content: content.to_owned(),
+                role: decoded.role,
+                content: decoded.content,
             })])
         }
     }
