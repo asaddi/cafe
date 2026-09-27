@@ -1,5 +1,7 @@
-use serde_json::{Number, Value, json};
-use snafu::{FromString, Whatever};
+use schemars::{JsonSchema, schema_for};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use snafu::prelude::*;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -12,6 +14,17 @@ mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct RollDiceParams {
+    #[schemars(range(min = 1))]
+    /// The number of sides of each die, e.g. 6 is a standard six-sided die.
+    faces: u64,
+
+    #[schemars(range(min = 1))]
+    /// The number of dice to roll.
+    number: u64,
+}
+
 struct MyTools;
 
 impl ToolHandler for MyTools {
@@ -19,26 +32,16 @@ impl ToolHandler for MyTools {
         clippy::unused_async_trait_impl,
         reason = "random number generation isn't async, but this is a generic trait"
     )]
-    async fn handle(&self, name: &str, arguments: &Value) -> Result<Value> {
+    async fn handle(&self, name: &str, arguments: Value) -> Result<Value> {
         let value = match name {
             "roll_dice" => {
-                let faces = arguments
-                    .get("faces")
-                    .and_then(|v| v.as_number().and_then(Number::as_u64))
-                    .ok_or_else(|| {
-                        Whatever::without_source("bad argument for 'faces'".to_owned())
-                    })?;
-                let number = arguments
-                    .get("number")
-                    .and_then(|v| v.as_number().and_then(Number::as_u64))
-                    .ok_or_else(|| {
-                        Whatever::without_source("bad argument for 'number'".to_owned())
-                    })?;
+                let args: RollDiceParams =
+                    serde_json::from_value(arguments).whatever_context("bad arguments")?;
 
                 let mut total: u64 = 0;
 
-                for _ in 0..number {
-                    total += rand::random_range(1..faces);
+                for _ in 0..args.number {
+                    total += rand::random_range(1..args.faces);
                 }
 
                 json!(total)
@@ -77,22 +80,7 @@ async fn main() -> Result<()> {
         ToolDefinition::builder()
             .name("roll_dice")
             .description("Roll a number of dice (with the specified number of faces), returning the total result.")
-            .parameters(json!({
-                "type":"object",
-                "properties":{
-                    "faces":{
-                        "type":"integer",
-                        "description":"The number of sides of each die, e.g. 6 is a standard six-sided die.",
-                        "minimum": 1
-                    },
-                    "number":{
-                        "type":"integer",
-                        "description":"The number of dice to roll.",
-                        "minimum": 1
-                    }
-                },
-                "required":["faces", "number"]
-            }))
+            .parameters(schema_for!(RollDiceParams).into())
             .build()
     );
 

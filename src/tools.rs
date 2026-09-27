@@ -25,5 +25,5 @@ impl ToolDefinition {
 // This is technically more of a dispatcher, but we'll go with this for
 // now.
 pub trait ToolHandler {
-    async fn handle(&self, name: &str, arguments: &Value) -> Result<Value>;
+    async fn handle(&self, name: &str, arguments: Value) -> Result<Value>;
 }

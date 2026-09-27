@@ -82,11 +82,13 @@ where
                         event!(Level::DEBUG, "payload = {:?}", payload);
                         // TODO This is where we perform the function call and then
                         // append the result back onto history
-                        let tool_result =
-                            match tool_handler.handle(&payload.name, &payload.arguments).await {
-                                Ok(result) => result,
-                                Err(e) => json!({"error":e.to_string()}),
-                            };
+                        let tool_result = match tool_handler
+                            .handle(&payload.name, payload.arguments.clone())
+                            .await
+                        {
+                            Ok(result) => result,
+                            Err(e) => json!({"error":e.to_string()}),
+                        };
                         history.clone().add_message(FunctionCallResult(
                             FunctionCallResultPayload {
                                 id: payload.id,
