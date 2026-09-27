@@ -29,3 +29,15 @@ Anyway, prior to this effort, I did end up evaluating quite a few (open source) 
 But I will say that my personal favorite, and the one that I've used extensively and still use is [maki](https://github.com/tontinton/maki). Rust-based, minimal by design, extensible by Lua.
 
 Anyway, that's all I wanted to say for now. This is just a toy, etc. etc.
+
+## To Do
+
+* [ ] Configuration file
+* [ ] Set provider/model from config
+* [ ] Define system prompt(s) in config file, allow selection
+* [ ] Read v1 character data from JSON, set system prompt from it
+* [ ] MCP client (HTTP transport only), expose as tools. For the time being, I have no plans to support local/stdio MCP servers, even though it would be easy/easier
+* [ ] Perhaps add framework to expose "built-in" tools through an MCP server (I still have no idea what tools it would need)
+* [ ] Concept of persistent chat sessions
+* [ ] Branching of chat session
+* [ ] Regeneration of model responses
