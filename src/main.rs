@@ -1,3 +1,4 @@
+use clap::Parser;
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -55,9 +56,37 @@ impl ToolHandler for MyTools {
     }
 }
 
+#[derive(Debug, Parser)]
+#[command(version, about)]
+struct Args {
+    /// Base URL of OpenAI-compatible API endpoint
+    #[arg(
+        short,
+        long,
+        env = "CAFE_BASE_URL",
+        default_value = "http://localhost:8080/v1"
+    )]
+    base_url: String,
+
+    /// Optional API key
+    #[arg(long, env = "CAFE_API_KEY", hide_env_values = true)]
+    api_key: Option<String>,
+
+    /// Model to use
+    #[arg(
+        short,
+        long,
+        env = "CAFE_MODEL",
+        default_value = "mistral-nemo-instruct-2407" // an oldie, but goodie
+    )]
+    model: String,
+}
+
 #[tokio::main]
 #[snafu::report]
 async fn main() -> Result<()> {
+    let args: Args = Args::parse();
+
     let fmt_layer = fmt::layer().with_target(false);
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
@@ -69,8 +98,9 @@ async fn main() -> Result<()> {
         .init();
 
     let server = chat::OpenAICompatChatServer::builder()
-        .base_url("http://localhost:8069/v1")
-        .model("system")
+        .base_url(&args.base_url)
+        .maybe_api_key(args.api_key.as_deref())
+        .model(&args.model)
         .build();
 
     let history = chat::OpenAICompatChatHistory::new();
