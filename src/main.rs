@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
 
     let server = chat::OpenAICompatChatServer::builder()
         .base_url("http://localhost:8069/v1")
-        .model("whatever")
+        .model("system")
         .build();
 
     let history = chat::OpenAICompatChatHistory::new();

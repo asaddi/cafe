@@ -198,7 +198,8 @@ impl ChatServer for OpenAICompatChatServer {
         let request_json = json!({
             "model":&self.model,
             "messages":&my_hist.messages,
-            "tools":tools_json
+            "tools":tools_json,
+            "stream":false,
         });
         let response = self
             .client
