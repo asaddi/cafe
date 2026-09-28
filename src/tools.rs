@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use rmcp::{
     RoleClient, ServiceExt,
     model::{CallToolRequestParams, ClientCapabilities, Implementation, InitializeRequestParams},
     service::RunningService,
     transport::StreamableHttpClientTransport,
 };
+use schemars::{JsonSchema, schema_for};
+use serde::Deserialize;
 use serde_json::Value;
 use snafu::ResultExt;
 use tracing::{Level, event};
@@ -35,6 +38,7 @@ impl ToolDefinition {
 
 // This is technically more of a dispatcher, but we'll go with this for
 // now.
+#[async_trait]
 pub trait ToolHandler {
     fn get_tools(&self) -> Vec<ToolDefinition>;
     fn is_handled(&self, name: &str) -> bool; // TODO I don't like this
@@ -77,6 +81,7 @@ impl McpToolHandler {
     }
 }
 
+#[async_trait]
 impl ToolHandler for McpToolHandler {
     fn get_tools(&self) -> Vec<ToolDefinition> {
         let mut tools = Vec::new();
@@ -127,5 +132,61 @@ impl ToolHandler for McpToolHandler {
 
     fn is_handled(&self, name: &str) -> bool {
         self.tools.contains_key(name)
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct RollDiceParams {
+    #[schemars(range(min = 1))]
+    /// The number of sides of each die, e.g. 6 is a standard six-sided die.
+    faces: u64,
+
+    #[schemars(range(min = 1))]
+    /// The number of dice to roll.
+    number: u64,
+}
+
+pub struct BuiltinTools;
+
+#[async_trait]
+impl ToolHandler for BuiltinTools {
+    fn get_tools(&self) -> Vec<ToolDefinition> {
+        vec![
+            ToolDefinition::builder()
+                .name("roll_dice")
+                .description("Roll a number of dice (with the specified number of faces), returning the total result.")
+                .parameters(schema_for!(RollDiceParams).into())
+                .build()
+        ]
+    }
+
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "random number generation isn't async, but this is a generic trait"
+    )]
+    async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
+        let value = match name {
+            "roll_dice" => {
+                let args: RollDiceParams =
+                    serde_json::from_value(arguments).whatever_context("bad arguments")?;
+
+                let mut total: u64 = 0;
+
+                for _ in 0..args.number {
+                    total += rand::random_range(1..=args.faces);
+                }
+
+                format!("{total}")
+            }
+            _ => {
+                unimplemented!("tool: {name}");
+            }
+        };
+
+        Ok(value)
+    }
+
+    fn is_handled(&self, name: &str) -> bool {
+        matches!(name, "roll_dice")
     }
 }
