@@ -1,12 +1,12 @@
 use clap::Parser;
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use snafu::prelude::*;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::tools::{ToolDefinition, ToolHandler};
+use crate::tools::{McpToolHandler, ToolDefinition, ToolHandler};
 use crate::ui::main_loop;
 
 mod chat;
@@ -26,14 +26,64 @@ struct RollDiceParams {
     number: u64,
 }
 
-struct MyTools;
+struct MyTools {
+    // FIXME I wanted dynamic dispatching, but async handler makes it not dyn-compatible
+    builtins: BuiltinTools,
+    mcp: Option<McpToolHandler>,
+}
+
+impl MyTools {
+    fn new(mcp: Option<McpToolHandler>) -> Self {
+        Self {
+            builtins: BuiltinTools,
+            mcp,
+        }
+    }
+}
 
 impl ToolHandler for MyTools {
+    fn get_tools(&self) -> Vec<ToolDefinition> {
+        let mut tools = Vec::new();
+        tools.extend(self.builtins.get_tools());
+        if let Some(mcp) = &self.mcp {
+            tools.extend(mcp.get_tools());
+        }
+        tools
+    }
+
+    async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
+        if self.builtins.is_handled(name) {
+            self.builtins.handle(name, arguments).await
+        } else if let Some(mcp) = &self.mcp {
+            mcp.handle(name, arguments).await
+        } else {
+            panic!()
+        }
+    }
+
+    fn is_handled(&self, _name: &str) -> bool {
+        true
+    }
+}
+
+struct BuiltinTools;
+
+impl ToolHandler for BuiltinTools {
+    fn get_tools(&self) -> Vec<ToolDefinition> {
+        vec![
+            ToolDefinition::builder()
+                .name("roll_dice")
+                .description("Roll a number of dice (with the specified number of faces), returning the total result.")
+                .parameters(schema_for!(RollDiceParams).into())
+                .build()
+        ]
+    }
+
     #[allow(
         clippy::unused_async_trait_impl,
         reason = "random number generation isn't async, but this is a generic trait"
     )]
-    async fn handle(&self, name: &str, arguments: Value) -> Result<Value> {
+    async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
         let value = match name {
             "roll_dice" => {
                 let args: RollDiceParams =
@@ -45,7 +95,7 @@ impl ToolHandler for MyTools {
                     total += rand::random_range(1..=args.faces);
                 }
 
-                json!(total)
+                format!("{total}")
             }
             _ => {
                 unimplemented!("tool: {name}");
@@ -53,6 +103,10 @@ impl ToolHandler for MyTools {
         };
 
         Ok(value)
+    }
+
+    fn is_handled(&self, name: &str) -> bool {
+        matches!(name, "roll_dice")
     }
 }
 
@@ -80,6 +134,10 @@ struct Args {
         default_value = "mistral-nemo-instruct-2407" // an oldie, but goodie
     )]
     model: String,
+
+    /// Optional MCP server URL for tools
+    #[arg(long, env = "CAFE_MCP_SERVER")]
+    mcp_server: Option<String>,
 }
 
 #[tokio::main]
@@ -105,14 +163,18 @@ async fn main() -> Result<()> {
 
     let history = chat::OpenAICompatChatHistory::new();
 
-    let mut tools = vec![];
-    tools.push(
-        ToolDefinition::builder()
-            .name("roll_dice")
-            .description("Roll a number of dice (with the specified number of faces), returning the total result.")
-            .parameters(schema_for!(RollDiceParams).into())
-            .build()
-    );
+    let tools = if let Some(mcp_server) = args.mcp_server {
+        let mcp = McpToolHandler::new(&mcp_server).await.unwrap();
+        MyTools::new(Some(mcp))
+    } else {
+        MyTools::new(None)
+    };
 
-    main_loop(server, history, &tools, MyTools).await
+    println!("Tools available:");
+    for tool in &tools.get_tools() {
+        println!(" - {}", tool.name);
+    }
+    println!();
+
+    main_loop(server, history, tools).await
 }

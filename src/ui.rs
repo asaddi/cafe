@@ -13,23 +13,19 @@ use crate::{
         Message::{self, FunctionCallResult},
         TextPayload,
     },
-    tools::{ToolDefinition, ToolHandler},
+    tools::ToolHandler,
 };
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
-pub async fn main_loop<S, H>(
-    server: S,
-    history: H,
-    tools: &[ToolDefinition],
-    tool_handler: impl ToolHandler,
-) -> Result<()>
+pub async fn main_loop<S, H>(server: S, history: H, tool_handler: impl ToolHandler) -> Result<()>
 where
     S: ChatServer,
     H: ChatHistory + std::fmt::Debug,
 {
     let server = &server;
     let history = Rc::new(history);
+    let tools = tool_handler.get_tools();
 
     // TODO add system message
 
@@ -60,10 +56,10 @@ where
         }))?;
 
         loop {
-            event!(Level::DEBUG, "history = {:?}", history);
+            event!(Level::TRACE, "history = {:?}", history);
 
             let results = server
-                .complete(history.clone(), tools)
+                .complete(history.clone(), &tools)
                 .await
                 .whatever_context("complete")?;
 
@@ -80,22 +76,22 @@ where
                     }
                     Message::FunctionCall(payload) => {
                         event!(Level::DEBUG, "payload = {:?}", payload);
-                        // TODO This is where we perform the function call and then
-                        // append the result back onto history
                         let tool_result = match tool_handler
                             .handle(&payload.name, payload.arguments.clone())
                             .await
                         {
                             Ok(result) => result,
-                            Err(e) => json!({"error":e.to_string()}),
+                            Err(e) => json!({"error":e.to_string()}).to_string(),
                         };
-                        history.clone().add_message(FunctionCallResult(
-                            FunctionCallResultPayload {
-                                id: payload.id,
-                                name: payload.name,
-                                result: tool_result.to_string(),
-                            },
-                        ))?;
+                        let call_result = FunctionCallResultPayload {
+                            id: payload.id,
+                            name: payload.name,
+                            result: tool_result,
+                        };
+                        event!(Level::DEBUG, "call_result = {:?}", call_result);
+                        history
+                            .clone()
+                            .add_message(FunctionCallResult(call_result))?;
                         true
                     }
                     Message::FunctionCallResult(_) => {

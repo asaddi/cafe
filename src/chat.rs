@@ -32,7 +32,7 @@ pub struct TextPayload {
     pub content: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCallPayload {
     pub id: String,
     pub name: String,
