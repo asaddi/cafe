@@ -42,7 +42,7 @@ impl ToolHandler for MyTools {
                 let mut total: u64 = 0;
 
                 for _ in 0..args.number {
-                    total += rand::random_range(1..args.faces);
+                    total += rand::random_range(1..=args.faces);
                 }
 
                 json!(total)
