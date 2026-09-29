@@ -36,8 +36,6 @@ impl ToolDefinition {
     }
 }
 
-// This is technically more of a dispatcher, but we'll go with this for
-// now.
 #[async_trait]
 pub trait ToolHandler {
     fn get_tools(&self) -> Vec<ToolDefinition>;
@@ -188,5 +186,49 @@ impl ToolHandler for BuiltinTools {
 
     fn is_handled(&self, name: &str) -> bool {
         matches!(name, "roll_dice")
+    }
+}
+
+pub struct ToolDispatcher {
+    builtins: BuiltinTools,
+    extra_handlers: Vec<Box<dyn ToolHandler + Sync>>,
+}
+
+impl ToolDispatcher {
+    pub fn new(extra_handlers: Vec<Box<dyn ToolHandler + Sync>>) -> Self {
+        Self {
+            builtins: BuiltinTools,
+            extra_handlers,
+        }
+    }
+}
+
+#[async_trait]
+impl ToolHandler for ToolDispatcher {
+    fn get_tools(&self) -> Vec<ToolDefinition> {
+        let mut tools = Vec::new();
+        tools.extend(self.builtins.get_tools());
+        for handler in &self.extra_handlers {
+            tools.extend(handler.get_tools());
+        }
+        // TODO cache this, maybe a simple TTL cache
+        tools
+    }
+
+    async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
+        if self.builtins.is_handled(name) {
+            self.builtins.handle(name, arguments).await
+        } else {
+            for handler in &self.extra_handlers {
+                if handler.is_handled(name) {
+                    return handler.handle(name, arguments).await;
+                }
+            }
+            panic!()
+        }
+    }
+
+    fn is_handled(&self, _name: &str) -> bool {
+        true
     }
 }

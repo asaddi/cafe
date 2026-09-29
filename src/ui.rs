@@ -8,6 +8,7 @@ use snafu::ResultExt;
 use tracing::{Level, event};
 
 use crate::{
+    Result,
     chat::{
         ChatHistory, ChatServer, FunctionCallResultPayload,
         Message::{self, FunctionCallResult},
@@ -15,8 +16,6 @@ use crate::{
     },
     tools::ToolHandler,
 };
-
-type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
 pub async fn main_loop<S, H>(server: S, history: H, tool_handler: impl ToolHandler) -> Result<()>
 where

@@ -1,11 +1,9 @@
-use async_trait::async_trait;
 use clap::Parser;
-use serde_json::Value;
 use snafu::ResultExt;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::tools::{BuiltinTools, McpToolHandler, ToolDefinition, ToolHandler};
+use crate::tools::{McpToolHandler, ToolDispatcher, ToolHandler};
 use crate::ui::main_loop;
 
 mod chat;
@@ -13,50 +11,6 @@ mod tools;
 mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
-
-struct MyTools {
-    builtins: BuiltinTools,
-    handlers: Vec<Box<dyn ToolHandler + Sync>>,
-}
-
-impl MyTools {
-    fn new(handlers: Vec<Box<dyn ToolHandler + Sync>>) -> Self {
-        Self {
-            builtins: BuiltinTools,
-            handlers,
-        }
-    }
-}
-
-#[async_trait]
-impl ToolHandler for MyTools {
-    fn get_tools(&self) -> Vec<ToolDefinition> {
-        let mut tools = Vec::new();
-        tools.extend(self.builtins.get_tools());
-        for handler in &self.handlers {
-            tools.extend(handler.get_tools());
-        }
-        // TODO cache this, maybe a simple TTL cache
-        tools
-    }
-
-    async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
-        if self.builtins.is_handled(name) {
-            self.builtins.handle(name, arguments).await
-        } else {
-            for handler in &self.handlers {
-                if handler.is_handled(name) {
-                    return handler.handle(name, arguments).await;
-                }
-            }
-            panic!()
-        }
-    }
-
-    fn is_handled(&self, _name: &str) -> bool {
-        true
-    }
-}
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -120,7 +74,7 @@ async fn main() -> Result<()> {
         extra_handlers.push(Box::new(mcp));
     }
 
-    let tools = MyTools::new(extra_handlers);
+    let tools = ToolDispatcher::new(extra_handlers);
 
     println!("Tools available:");
     for tool in &tools.get_tools() {
