@@ -14,10 +14,16 @@ use crate::{
         Message::{self, FunctionCallResult},
         TextPayload,
     },
+    prompt::SystemPromptSource,
     tools::ToolHandler,
 };
 
-pub async fn main_loop<S, H>(server: S, history: H, tool_handler: impl ToolHandler) -> Result<()>
+pub async fn main_loop<S, H>(
+    server: S,
+    history: H,
+    tool_handler: impl ToolHandler,
+    sys_prompt_source: Box<dyn SystemPromptSource>,
+) -> Result<()>
 where
     S: ChatServer,
     H: ChatHistory + std::fmt::Debug,
@@ -26,7 +32,17 @@ where
     let history = Rc::new(history);
     let tools = tool_handler.get_tools();
 
-    // TODO add system message
+    // TODO notion of user's identity/persona
+    let sys_prompt = sys_prompt_source.generate_system_prompt("User")?;
+    let sys_prompt = sys_prompt.trim();
+    if !sys_prompt.is_empty() {
+        history.clone().add_message(Message::Text(TextPayload {
+            // TODO some models (which?) apparently use "developer" nowadays.
+            // How to handle?
+            role: "system".to_owned(),
+            content: sys_prompt.to_owned(),
+        }))?;
+    }
 
     loop {
         print!("U> ");
