@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{
     Result,
     config::Config,
-    prompt::chara::{TavernCard, read_card_json, replace_placeholders},
+    prompt::chara::{TavernCard, read_card_json},
 };
 
 mod chara;
@@ -57,17 +57,9 @@ impl CharaSystemPrompt {
 impl SystemPromptSource for CharaSystemPrompt {
     fn generate_system_prompt(&self, username: &str) -> Result<String> {
         if let Some(card) = &self.card {
-            // TODO Need to do substitution as required by chara card specs.
-            match card {
-                // FIXME We don't care if it's V1 or V2... hmmm.
-                // Our data representation is pretty much broken.
-                // Though I suppose it influences whether or not we
-                // can access V2 fields.
-                TavernCard::V1(data) | TavernCard::V2(data) => {
-                    let desc = replace_placeholders(username, &data.name, &data.description);
-                    Ok(desc)
-                }
-            }
+            let data = card.data();
+            let desc = data.description(username);
+            Ok(desc)
         } else {
             Ok(String::new())
         }

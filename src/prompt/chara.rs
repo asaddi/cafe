@@ -9,8 +9,10 @@ use crate::Result;
 
 type ExtensionType = HashMap<String, Value>;
 
+// Only used for reading from JSON. Since V2 is a strict superset of
+// V1, we'll use the same struct.
 #[derive(Debug, Deserialize)]
-pub struct TavernCardV1 {
+struct TavernCardV1 {
     name: String,
     description: String,
     personality: String,
@@ -23,7 +25,7 @@ pub struct TavernCardV1 {
 #[derive(Debug, Default, Deserialize)]
 pub struct TavernCardV2 {
     pub name: String,
-    pub description: String,
+    description: String,
     personality: String,
     scenario: String,
     first_mes: String,
@@ -41,6 +43,32 @@ pub struct TavernCardV2 {
     extensions: ExtensionType,
 }
 
+impl TavernCardV2 {
+    pub fn description(&self, username: &str) -> String {
+        replace_placeholders(username, &self.name, &self.description)
+    }
+
+    #[expect(dead_code)]
+    pub fn personality(&self, username: &str) -> String {
+        replace_placeholders(username, &self.name, &self.personality)
+    }
+
+    #[expect(dead_code)]
+    pub fn scenario(&self, username: &str) -> String {
+        replace_placeholders(username, &self.name, &self.scenario)
+    }
+
+    #[expect(dead_code)]
+    pub fn first_mes(&self, username: &str) -> String {
+        replace_placeholders(username, &self.name, &self.first_mes)
+    }
+
+    #[expect(dead_code)]
+    pub fn mes_example(&self, username: &str) -> String {
+        replace_placeholders(username, &self.name, &self.mes_example)
+    }
+}
+
 #[expect(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct CharacterBook {
@@ -50,6 +78,9 @@ pub struct CharacterBook {
     token_budget: Option<Number>,
     recursive_scanning: Option<bool>,
     extensions: ExtensionType,
+    // NB Standalone world books/lore books seem to have the
+    // following as object/dict instead of an array. If/when we
+    // load those, we'll probably have to support both.
     entries: Vec<CharacterBookEntry>,
 }
 
@@ -92,6 +123,14 @@ impl From<TavernCardV1> for TavernCardV2 {
 pub enum TavernCard {
     V1(TavernCardV2), // Not a typo. Use same struct.
     V2(TavernCardV2),
+}
+
+impl TavernCard {
+    pub fn data(&self) -> &TavernCardV2 {
+        match self {
+            TavernCard::V1(data) | TavernCard::V2(data) => data,
+        }
+    }
 }
 
 pub fn read_card_json<P>(card: P) -> Result<TavernCard>
@@ -143,49 +182,39 @@ pub fn replace_placeholders(user_name: &str, char_name: &str, input: &str) -> St
 
 #[cfg(test)]
 mod tests {
-    use super::{TavernCard, read_card_json, replace_placeholders};
+    use super::read_card_json;
 
     #[test]
     fn test_basic_v1() {
         let v1 = read_card_json("test/chara-V1.json").unwrap();
-        match v1 {
-            TavernCard::V1(data) => {
-                assert_eq!(data.name, "Sirocco");
-                assert_eq!(
-                    data.description,
-                    "You are {{char}}, a parrot that likes to party."
-                );
-            }
-            TavernCard::V2(_) => panic!(),
-        }
+        let data = v1.data();
+        assert_eq!(data.name, "Sirocco");
+        assert_eq!(
+            data.description,
+            "You are {{char}}, a parrot that likes to party."
+        );
     }
 
     #[test]
     fn test_replace_v1() {
         let v1 = read_card_json("test/chara-V1.json").unwrap();
-        match v1 {
-            TavernCard::V1(data) => {
-                let desc = replace_placeholders("User", &data.name, &data.description);
-                assert_eq!(desc, "You are Sirocco, a parrot that likes to party.");
-            }
-            TavernCard::V2(_) => panic!(),
-        }
+        let data = v1.data();
+        assert_eq!(
+            data.description("User"),
+            "You are Sirocco, a parrot that likes to party."
+        );
     }
 
     #[test]
     fn test_basic_v2() {
         let v2 = read_card_json("test/chara-V2.json").unwrap();
-        match v2 {
-            TavernCard::V1(_) => panic!(),
-            TavernCard::V2(data) => {
-                assert_eq!(data.name, "Jack");
-                assert_eq!(
-                    data.description,
-                    "You are {{char}}, a sparrow that likes to party."
-                );
-                assert_eq!(data.creator, "Me");
-                assert_eq!(data.character_version, "1.0");
-            }
-        }
+        let data = v2.data();
+        assert_eq!(data.name, "Jack");
+        assert_eq!(
+            data.description,
+            "You are {{char}}, a sparrow that likes to party."
+        );
+        assert_eq!(data.creator, "Me");
+        assert_eq!(data.character_version, "1.0");
     }
 }
