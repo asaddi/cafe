@@ -27,10 +27,14 @@ pub struct ToolDefinition {
 #[bon::bon]
 impl ToolDefinition {
     #[builder]
-    pub fn new(name: &str, description: Option<&str>, parameters: Option<Value>) -> Self {
+    pub fn new<T, U>(name: T, description: Option<U>, parameters: Option<Value>) -> Self
+    where
+        T: AsRef<str>,
+        U: ToString,
+    {
         Self {
-            name: name.to_owned(),
-            description: description.map(ToOwned::to_owned),
+            name: name.as_ref().to_owned(),
+            description: description.map(|s| s.to_string()),
             parameters,
         }
     }
@@ -92,7 +96,7 @@ impl ToolHandler for McpToolHandler {
             };
             let tool = ToolDefinition::builder()
                 .name(&mcp_tool.name)
-                .maybe_description(mcp_tool.description.as_deref())
+                .maybe_description(mcp_tool.description.clone())
                 .maybe_parameters(params)
                 .build();
             tools.push(tool);

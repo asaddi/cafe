@@ -1,14 +1,13 @@
 use std::{any::Any, cell::RefCell, rc::Rc};
 
-use bon::bon;
-use reqwest::{Client, RequestBuilder};
+use reqwest::Client;
 use serde_json::{Value, json};
 use snafu::{FromString, Whatever, prelude::*};
 use tracing::{Level, event};
 
-use crate::Result;
 use crate::chat::Message::FunctionCall;
 use crate::tools::ToolDefinition;
+use crate::{RequestBuilderExt, Result};
 
 pub trait ChatHistory: Any {
     // Note: Expects interior mutability
@@ -61,30 +60,21 @@ pub struct OpenAICompatChatServer {
     model: String,
 }
 
-trait RequestBuilderExt {
-    fn maybe_bearer_auth(self, token: Option<&str>) -> RequestBuilder;
-}
-
-impl RequestBuilderExt for RequestBuilder {
-    fn maybe_bearer_auth(self, token: Option<&str>) -> RequestBuilder {
-        if let Some(tok) = token {
-            self.bearer_auth(tok)
-        } else {
-            self
-        }
-    }
-}
-
-#[bon]
+#[bon::bon]
 impl OpenAICompatChatServer {
     #[builder]
-    pub fn new(base_url: &str, api_key: Option<&str>, model: &str) -> Self {
+    pub fn new<T, U, V>(base_url: T, api_key: Option<U>, model: V) -> Self
+    where
+        T: AsRef<str>,
+        U: ToString,
+        V: AsRef<str>,
+    {
         let client = Client::builder().build().unwrap();
         Self {
             client,
-            base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.map(ToOwned::to_owned),
-            model: model.to_owned(),
+            base_url: base_url.as_ref().trim_end_matches('/').to_owned(),
+            api_key: api_key.map(|s| s.to_string()),
+            model: model.as_ref().to_owned(),
         }
     }
 

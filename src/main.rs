@@ -18,6 +18,20 @@ mod ui;
 
 type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
 
+trait RequestBuilderExt {
+    fn maybe_bearer_auth<T: std::fmt::Display>(self, token: Option<T>) -> reqwest::RequestBuilder;
+}
+
+impl RequestBuilderExt for reqwest::RequestBuilder {
+    fn maybe_bearer_auth<T: std::fmt::Display>(self, token: Option<T>) -> reqwest::RequestBuilder {
+        if let Some(tok) = token {
+            self.bearer_auth(tok)
+        } else {
+            self
+        }
+    }
+}
+
 fn get_project_dirs() -> ProjectDirs {
     ProjectDirs::from("", "", "cafe").expect("no project dirs")
 }
@@ -82,9 +96,9 @@ async fn main() -> Result<()> {
     };
 
     let server = chat::OpenAICompatChatServer::builder()
-        .base_url(&args.base_url)
-        .maybe_api_key(args.api_key.as_deref())
-        .model(&args.model)
+        .base_url(args.base_url)
+        .maybe_api_key(args.api_key)
+        .model(args.model)
         .build();
 
     let history = chat::OpenAICompatChatHistory::new();
