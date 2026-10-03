@@ -1,6 +1,6 @@
 use std::{io::ErrorKind, path::Path};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use snafu::{FromString, ResultExt, Whatever};
 use tracing::{Level, event};
 
@@ -11,6 +11,16 @@ pub struct Config {
     // TODO
     #[serde(rename = "system-prompt")]
     pub system_prompt: Option<String>,
+
+    pub mcp: Option<Vec<McpConfig>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct McpConfig {
+    pub name: String,
+    pub url: String,
+    // Wait, people lock down their MCP servers? 😜
+    // TODO Research this. Is it the usual OIDC/token bearer auth?
 }
 
 impl Config {
@@ -47,6 +57,7 @@ mod tests {
     fn test_default_config() {
         let config = Config::load("test/no-config.toml").unwrap();
         assert!(config.system_prompt.is_none());
+        assert!(config.mcp.is_none());
     }
 
     #[test]
@@ -56,5 +67,36 @@ mod tests {
             config.system_prompt,
             Some("You are a helpful assistant that talks like a pirate.".to_owned())
         );
+        assert!(config.mcp.is_none());
+    }
+
+    #[test]
+    fn test_mcp_config_1() {
+        let config = Config::load("test/mcp.toml").unwrap();
+        insta::assert_ron_snapshot!(&config.mcp, @r#"
+        Some([
+          McpConfig(
+            name: "Some MCP server",
+            url: "https://mcp.example.com/mcp",
+          ),
+        ])
+        "#);
+    }
+
+    #[test]
+    fn test_mcp_config_2() {
+        let config = Config::load("test/mcp2.toml").unwrap();
+        insta::assert_ron_snapshot!(&config.mcp, @r#"
+        Some([
+          McpConfig(
+            name: "Some MCP server",
+            url: "https://mcp.example.com/mcp",
+          ),
+          McpConfig(
+            name: "Another MCP server",
+            url: "https://mcp2.example.com/mcp",
+          ),
+        ])
+        "#);
     }
 }

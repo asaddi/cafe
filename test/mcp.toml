@@ -1,0 +1,5 @@
+system-prompt = "You are a helpful assistant that talks like a pirate."
+
+[[mcp]]
+name = "Some MCP server"
+url = "https://mcp.example.com/mcp"

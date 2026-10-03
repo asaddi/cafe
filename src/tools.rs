@@ -224,6 +224,8 @@ impl ToolHandler for ToolDispatcher {
             self.builtins.handle(name, arguments).await
         } else {
             for handler in &self.extra_handlers {
+                // TODO There's no real resolution for duplicate tool names
+                // other than "first one wins."
                 if handler.is_handled(name) {
                     return handler.handle(name, arguments).await;
                 }

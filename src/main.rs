@@ -61,10 +61,6 @@ struct Args {
     )]
     model: String,
 
-    /// Optional MCP server URL for tools
-    #[arg(long, env = "CAFE_MCP_SERVER")]
-    mcp_server: Option<String>,
-
     /// Optional character JSON
     #[arg(long)]
     chara: Option<PathBuf>,
@@ -105,11 +101,13 @@ async fn main() -> Result<()> {
 
     // TODO maybe use a builder to make this cleaner
     let mut extra_handlers: Vec<Box<dyn ToolHandler + Sync>> = Vec::new();
-    if let Some(mcp_server) = args.mcp_server {
-        let mcp = McpToolHandler::new(&mcp_server)
-            .await
-            .whatever_context("initializing MCP server")?;
-        extra_handlers.push(Box::new(mcp));
+    if let Some(mcp_servers) = config.mcp {
+        for mcp_server in mcp_servers {
+            let mcp = McpToolHandler::new(&mcp_server.url)
+                .await
+                .with_whatever_context(|_| format!("initializing MCP server {}", mcp_server.url))?;
+            extra_handlers.push(Box::new(mcp));
+        }
     }
 
     let tools = ToolDispatcher::new(extra_handlers);
