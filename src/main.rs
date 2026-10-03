@@ -64,6 +64,10 @@ struct Args {
     /// Optional character JSON
     #[arg(long)]
     chara: Option<PathBuf>,
+
+    /// Username for use with character card/JSON
+    #[arg(long)]
+    persona: Option<String>,
 }
 
 #[tokio::main]
@@ -83,6 +87,7 @@ async fn main() -> Result<()> {
 
     let config_path = crate::get_project_dirs().config_dir().join("config.toml");
     let config = config::Config::load(&config_path)?;
+
     let sys_prompt_source: Box<dyn SystemPromptSource> = if let Some(chara) = args.chara {
         let mut chara_prompt = CharaSystemPrompt::new(&config);
         chara_prompt.load_card(chara)?;
@@ -90,6 +95,8 @@ async fn main() -> Result<()> {
     } else {
         Box::new(BasicSystemPrompt::new(&config))
     };
+
+    let username = args.persona.or_else(|| config.persona.clone());
 
     let server = chat::OpenAICompatChatServer::builder()
         .base_url(args.base_url)
@@ -118,5 +125,12 @@ async fn main() -> Result<()> {
     }
     println!();
 
-    main_loop(server, history, tools, sys_prompt_source).await
+    main_loop(
+        server,
+        history,
+        tools,
+        sys_prompt_source,
+        username.as_deref(),
+    )
+    .await
 }

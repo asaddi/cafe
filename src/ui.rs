@@ -23,6 +23,7 @@ pub async fn main_loop<S, H>(
     history: H,
     tool_handler: impl ToolHandler,
     sys_prompt_source: Box<dyn SystemPromptSource>,
+    username: Option<&str>,
 ) -> Result<()>
 where
     S: ChatServer,
@@ -33,7 +34,7 @@ where
     let tools = tool_handler.get_tools();
 
     // TODO notion of user's identity/persona
-    let sys_prompt = sys_prompt_source.generate_system_prompt("User")?;
+    let sys_prompt = sys_prompt_source.generate_system_prompt(username.unwrap_or("User"))?;
     let sys_prompt = sys_prompt.trim();
     if !sys_prompt.is_empty() {
         history.clone().add_message(Message::Text(TextPayload {

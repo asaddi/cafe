@@ -12,6 +12,8 @@ pub struct Config {
     #[serde(rename = "system-prompt")]
     pub system_prompt: Option<String>,
 
+    pub persona: Option<String>,
+
     pub mcp: Option<Vec<McpConfig>>,
 }
 
