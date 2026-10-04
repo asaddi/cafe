@@ -30,12 +30,17 @@ impl Config {
     where
         P: AsRef<Path>,
     {
+        let config_name = config_path.as_ref().display();
+
         let config_str = match std::fs::read_to_string(&config_path) {
             Ok(s) => s,
             Err(e) => {
                 if e.kind() == ErrorKind::NotFound {
                     // No config (yet) and that's OK
-                    event!(Level::DEBUG, "using default config");
+                    event!(
+                        Level::INFO,
+                        "no config found at {config_name}; using default"
+                    );
                     return Ok(Config::default());
                 }
                 return Err(Whatever::with_source(
@@ -45,8 +50,8 @@ impl Config {
             }
         };
         let config = toml::from_str(&config_str)
-            .with_whatever_context(|_| format!("parsing {}", config_path.as_ref().display()))?;
-        event!(Level::DEBUG, "config = {:?}", config);
+            .with_whatever_context(|_| format!("parsing {config_name}"))?;
+        event!(Level::TRACE, "config = {:?}", config);
         Ok(config)
     }
 }
