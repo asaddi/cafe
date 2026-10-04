@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use rmcp::{
@@ -42,19 +42,28 @@ impl ToolDefinition {
 
 #[async_trait]
 pub trait ToolHandler {
+    fn name(&self) -> &str;
+
     fn get_tools(&self) -> Vec<ToolDefinition>;
+
     fn is_handled(&self, name: &str) -> bool; // TODO I don't like this
+
     async fn handle(&self, name: &str, arguments: Value) -> Result<String>;
+
+    async fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct McpToolHandler {
+    name: String,
     client: RunningService<RoleClient, InitializeRequestParams>,
     tools: HashMap<String, rmcp::model::Tool>,
 }
 
 impl McpToolHandler {
-    pub async fn new(uri: &str) -> Result<Self> {
+    pub async fn new(uri: &str, name: &str) -> Result<Self> {
         // TODO I have no idea what I'm doing here
         // "if it compiles, it's correct"
         let transport = StreamableHttpClientTransport::from_uri(uri);
@@ -77,6 +86,7 @@ impl McpToolHandler {
         }
 
         Ok(McpToolHandler {
+            name: name.to_owned(),
             client,
             tools: tools_map,
         })
@@ -85,6 +95,10 @@ impl McpToolHandler {
 
 #[async_trait]
 impl ToolHandler for McpToolHandler {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn get_tools(&self) -> Vec<ToolDefinition> {
         let mut tools = Vec::new();
 
@@ -103,6 +117,10 @@ impl ToolHandler for McpToolHandler {
         }
 
         tools
+    }
+
+    fn is_handled(&self, name: &str) -> bool {
+        self.tools.contains_key(name)
     }
 
     async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
@@ -132,8 +150,13 @@ impl ToolHandler for McpToolHandler {
         }
     }
 
-    fn is_handled(&self, name: &str) -> bool {
-        self.tools.contains_key(name)
+    async fn shutdown(&mut self) -> Result<()> {
+        self.client
+            .close_with_timeout(Duration::from_secs(10))
+            .await
+            .whatever_context("close_with_timeout")?;
+
+        Ok(())
     }
 }
 
@@ -152,6 +175,11 @@ pub struct BuiltinTools;
 
 #[async_trait]
 impl ToolHandler for BuiltinTools {
+    #[expect(clippy::unnecessary_literal_bound)]
+    fn name(&self) -> &str {
+        "Built-in Tools"
+    }
+
     fn get_tools(&self) -> Vec<ToolDefinition> {
         vec![
             ToolDefinition::builder()
@@ -160,6 +188,10 @@ impl ToolHandler for BuiltinTools {
                 .parameters(schema_for!(RollDiceParams).into())
                 .build()
         ]
+    }
+
+    fn is_handled(&self, name: &str) -> bool {
+        matches!(name, "roll_dice")
     }
 
     #[allow(
@@ -187,19 +219,15 @@ impl ToolHandler for BuiltinTools {
 
         Ok(value)
     }
-
-    fn is_handled(&self, name: &str) -> bool {
-        matches!(name, "roll_dice")
-    }
 }
 
 pub struct ToolDispatcher {
     builtins: BuiltinTools,
-    extra_handlers: Vec<Box<dyn ToolHandler + Sync>>,
+    extra_handlers: Vec<Box<dyn ToolHandler + Send + Sync>>,
 }
 
 impl ToolDispatcher {
-    pub fn new(extra_handlers: Vec<Box<dyn ToolHandler + Sync>>) -> Self {
+    pub fn new(extra_handlers: Vec<Box<dyn ToolHandler + Send + Sync>>) -> Self {
         Self {
             builtins: BuiltinTools,
             extra_handlers,
@@ -209,6 +237,11 @@ impl ToolDispatcher {
 
 #[async_trait]
 impl ToolHandler for ToolDispatcher {
+    #[expect(clippy::unnecessary_literal_bound)]
+    fn name(&self) -> &str {
+        "Tool Dispatcher"
+    }
+
     fn get_tools(&self) -> Vec<ToolDefinition> {
         let mut tools = Vec::new();
         tools.extend(self.builtins.get_tools());
@@ -217,6 +250,10 @@ impl ToolHandler for ToolDispatcher {
         }
         // TODO cache this, maybe a simple TTL cache
         tools
+    }
+
+    fn is_handled(&self, _name: &str) -> bool {
+        true
     }
 
     async fn handle(&self, name: &str, arguments: Value) -> Result<String> {
@@ -234,7 +271,18 @@ impl ToolHandler for ToolDispatcher {
         }
     }
 
-    fn is_handled(&self, _name: &str) -> bool {
-        true
+    async fn shutdown(&mut self) -> Result<()> {
+        for handler in self.extra_handlers.iter_mut().rev() {
+            if let Err(e) = handler.shutdown().await {
+                event!(Level::ERROR, "shutting down {}: {e}", handler.name());
+            }
+        }
+
+        if let Err(e) = self.builtins.shutdown().await {
+            // Shouldn't happen, but who knows what tools may be added in the future
+            event!(Level::ERROR, "shutting down {}: {e}", self.builtins.name());
+        }
+
+        Ok(())
     }
 }

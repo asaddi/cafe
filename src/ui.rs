@@ -21,7 +21,7 @@ use crate::{
 pub async fn main_loop<S, H>(
     server: S,
     history: H,
-    tool_handler: impl ToolHandler,
+    mut tool_handler: impl ToolHandler + Send + Sync,
     sys_prompt_source: Box<dyn SystemPromptSource>,
     username: Option<&str>,
 ) -> Result<()>
@@ -45,7 +45,7 @@ where
         }))?;
     }
 
-    loop {
+    let main_result = loop {
         print!("U> ");
         io::stdout().flush().whatever_context("flush")?;
 
@@ -125,5 +125,9 @@ where
                 break;
             }
         }
-    }
+    };
+
+    tool_handler.shutdown().await?;
+
+    main_result
 }

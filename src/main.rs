@@ -107,10 +107,10 @@ async fn main() -> Result<()> {
     let history = chat::OpenAICompatChatHistory::new();
 
     // TODO maybe use a builder to make this cleaner
-    let mut extra_handlers: Vec<Box<dyn ToolHandler + Sync>> = Vec::new();
+    let mut extra_handlers: Vec<Box<dyn ToolHandler + Send + Sync>> = Vec::new();
     if let Some(mcp_servers) = config.mcp {
         for mcp_server in mcp_servers {
-            let mcp = McpToolHandler::new(&mcp_server.url)
+            let mcp = McpToolHandler::new(&mcp_server.url, &mcp_server.name)
                 .await
                 .with_whatever_context(|_| format!("initializing MCP server {}", mcp_server.url))?;
             extra_handlers.push(Box::new(mcp));
