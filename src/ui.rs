@@ -5,6 +5,7 @@ use std::{
 
 use serde_json::json;
 use snafu::ResultExt;
+use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 use tracing::{Level, event};
 
 use crate::{
@@ -46,8 +47,11 @@ where
     }
 
     let main_result = loop {
-        print!("U> ");
-        io::stdout().flush().whatever_context("flush")?;
+        let mut stdout = StandardStream::stdout(termcolor::ColorChoice::Auto);
+
+        stdout.reset().whatever_context("reset")?;
+        write!(&mut stdout, "§ ").whatever_context("write")?;
+        stdout.flush().whatever_context("flush")?;
 
         let mut input = String::new();
         let len = io::stdin()
@@ -64,12 +68,14 @@ where
             continue;
         }
 
-        println!();
+        writeln!(&mut stdout).whatever_context("writeln")?;
 
         history.clone().add_message(Message::Text(TextPayload {
             role: "user".to_owned(),
             content: input.to_owned(),
         }))?;
+
+        let assistant_color = ColorSpec::new().set_fg(Some(Color::Yellow)).to_owned();
 
         loop {
             event!(Level::TRACE, "history = {:?}", history);
@@ -86,8 +92,11 @@ where
 
                 if match msg {
                     Message::Text(payload) => {
-                        println!("A> {}", payload.content);
-                        println!();
+                        stdout
+                            .set_color(&assistant_color)
+                            .whatever_context("set_color")?;
+                        writeln!(&mut stdout, "{}", payload.content).whatever_context("writeln")?;
+                        writeln!(&mut stdout).whatever_context("writeln")?;
                         false
                     }
                     Message::FunctionCall(payload) => {

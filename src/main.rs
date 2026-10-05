@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -88,15 +89,33 @@ async fn main() -> Result<()> {
     let config_path = crate::get_project_dirs().config_dir().join("config.toml");
     let config = config::Config::load(&config_path)?;
 
+    let mut header = format!(
+        "cafe v{}, model = {}, chara = ",
+        env!("CARGO_PKG_VERSION"),
+        args.model
+    );
+
     let sys_prompt_source: Box<dyn SystemPromptSource> = if let Some(chara) = args.chara {
         let mut chara_prompt = CharaSystemPrompt::new(&config);
+        let chara_base = chara.clone();
+        let chara_base = chara_base.file_name().unwrap().display();
         chara_prompt.load_card(chara)?;
+        let _ = write!(header, "{chara_base}, "); // Is this really infallible?
         Box::new(chara_prompt)
     } else {
+        let _ = write!(header, "none, ");
         Box::new(BasicSystemPrompt::new(&config))
     };
 
     let username = args.persona.or_else(|| config.persona.clone());
+    let _ = write!(
+        header,
+        "persona = {}",
+        username.clone().unwrap_or("none".to_owned())
+    );
+
+    println!("{header}");
+    println!();
 
     let server = chat::OpenAICompatChatServer::builder()
         .base_url(args.base_url)

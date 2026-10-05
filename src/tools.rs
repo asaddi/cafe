@@ -1,6 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use rmcp::{
     RoleClient, ServiceExt,
     model::{CallToolRequestParams, ClientCapabilities, Implementation, InitializeRequestParams},
@@ -59,7 +60,7 @@ pub trait ToolHandler {
 pub struct McpToolHandler {
     name: String,
     client: RunningService<RoleClient, InitializeRequestParams>,
-    tools: HashMap<String, rmcp::model::Tool>,
+    tools: IndexMap<String, rmcp::model::Tool>,
 }
 
 impl McpToolHandler {
@@ -80,7 +81,7 @@ impl McpToolHandler {
             .list_all_tools()
             .await
             .whatever_context("list_all_tools")?;
-        let mut tools_map = HashMap::new();
+        let mut tools_map = IndexMap::new();
         for tool in tools {
             tools_map.insert(tool.name.to_string(), tool.clone());
         }
