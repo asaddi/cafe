@@ -1,12 +1,15 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
+use reqwest::header::{HeaderName, HeaderValue};
 use rmcp::{
     RoleClient, ServiceExt,
     model::{CallToolRequestParams, ClientCapabilities, Implementation, InitializeRequestParams},
     service::RunningService,
-    transport::StreamableHttpClientTransport,
+    transport::{
+        StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
+    },
 };
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
@@ -63,11 +66,26 @@ pub struct McpToolHandler {
     tools: IndexMap<String, rmcp::model::Tool>,
 }
 
+#[bon::bon]
 impl McpToolHandler {
-    pub async fn new(uri: &str, name: &str) -> Result<Self> {
+    #[builder]
+    pub async fn new<T, U>(
+        uri: T,
+        name: U,
+        headers: Option<HashMap<HeaderName, HeaderValue>>,
+    ) -> Result<Self>
+    where
+        T: AsRef<str>,
+        U: AsRef<str>,
+    {
         // TODO I have no idea what I'm doing here
         // "if it compiles, it's correct"
-        let transport = StreamableHttpClientTransport::from_uri(uri);
+        let mut transport_config = StreamableHttpClientTransportConfig::with_uri(uri.as_ref());
+        if let Some(headers) = headers {
+            transport_config = transport_config.custom_headers(headers);
+        }
+        let transport = StreamableHttpClientTransport::from_config(transport_config);
+
         let config = InitializeRequestParams::new(
             ClientCapabilities::default(),
             Implementation::new("cafe", env!("CARGO_PKG_VERSION")),
@@ -87,7 +105,7 @@ impl McpToolHandler {
         }
 
         Ok(McpToolHandler {
-            name: name.to_owned(),
+            name: name.as_ref().to_owned(),
             client,
             tools: tools_map,
         })

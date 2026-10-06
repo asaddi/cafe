@@ -2,6 +2,7 @@ use std::{io::ErrorKind, path::Path};
 
 use serde::{Deserialize, Serialize};
 use snafu::{FromString, ResultExt, Whatever};
+use toml::Table;
 use tracing::{Level, event};
 
 use crate::Result;
@@ -21,8 +22,10 @@ pub struct Config {
 pub struct McpConfig {
     pub name: String,
     pub url: String,
-    // Wait, people lock down their MCP servers? 😜
-    // TODO Research this. Is it the usual OIDC/token bearer auth?
+    // TODO? As this is a CLI/TUI app, it doesn't make sense to support
+    // OAuth. Only custom headers (which would include the "Authorization"
+    // header).
+    pub headers: Option<Table>,
 }
 
 impl Config {
@@ -85,6 +88,7 @@ mod tests {
           McpConfig(
             name: "Some MCP server",
             url: "https://mcp.example.com/mcp",
+            headers: None,
           ),
         ])
         "#);
@@ -98,10 +102,29 @@ mod tests {
           McpConfig(
             name: "Some MCP server",
             url: "https://mcp.example.com/mcp",
+            headers: None,
           ),
           McpConfig(
             name: "Another MCP server",
             url: "https://mcp2.example.com/mcp",
+            headers: None,
+          ),
+        ])
+        "#);
+    }
+
+    #[test]
+    fn test_mcp_config_3() {
+        let config = Config::load("test/mcp3.toml").unwrap();
+        insta::assert_ron_snapshot!(&config.mcp, @r#"
+        Some([
+          McpConfig(
+            name: "Some MCP server",
+            url: "https://mcp.example.com/mcp",
+            headers: Some({
+              "authorization": "Bearer my-token",
+              "x-api-key": "my-api-key",
+            }),
           ),
         ])
         "#);

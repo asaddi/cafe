@@ -1,0 +1,7 @@
+system-prompt = "You are a helpful assistant that talks like a pirate."
+
+[[mcp]]
+name = "Some MCP server"
+url = "https://mcp.example.com/mcp"
+headers.authorization = "Bearer my-token"
+headers."x-api-key" = "my-api-key"

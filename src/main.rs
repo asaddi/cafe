@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Parser;
 use directories::ProjectDirs;
+use reqwest::header::{HeaderName, HeaderValue};
 use snafu::ResultExt;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -129,7 +132,23 @@ async fn main() -> Result<()> {
     let mut extra_handlers: Vec<Box<dyn ToolHandler + Send + Sync>> = Vec::new();
     if let Some(mcp_servers) = config.mcp {
         for mcp_server in mcp_servers {
-            let mcp = McpToolHandler::new(&mcp_server.url, &mcp_server.name)
+            let headers = mcp_server.headers.map(|h| {
+                let mut headers: HashMap<HeaderName, HeaderValue> = HashMap::new();
+                for (k, v) in h {
+                    // FIXME These unwraps shouldn't be here
+                    headers.insert(
+                        HeaderName::from_str(&k).unwrap(),
+                        HeaderValue::from_str(v.as_str().unwrap()).unwrap(),
+                    );
+                }
+                headers
+            });
+
+            let mcp = McpToolHandler::builder()
+                .name(mcp_server.name)
+                .uri(&mcp_server.url)
+                .maybe_headers(headers)
+                .build()
                 .await
                 .with_whatever_context(|_| format!("initializing MCP server {}", mcp_server.url))?;
             extra_handlers.push(Box::new(mcp));
