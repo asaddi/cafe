@@ -32,7 +32,6 @@ where
 {
     let server = &server;
     let history = Rc::new(history);
-    let tools = tool_handler.get_tools();
 
     // TODO notion of user's identity/persona
     let sys_prompt = sys_prompt_source.generate_system_prompt(username.unwrap_or("User"))?;
@@ -45,6 +44,8 @@ where
             content: sys_prompt.to_owned(),
         }))?;
     }
+
+    let assistant_color = ColorSpec::new().set_fg(Some(Color::Yellow)).to_owned();
 
     let main_result = loop {
         let mut stdout = StandardStream::stdout(termcolor::ColorChoice::Auto);
@@ -75,29 +76,59 @@ where
             content: input.to_owned(),
         }))?;
 
-        let assistant_color = ColorSpec::new().set_fg(Some(Color::Yellow)).to_owned();
+        let text_handler = |payload: TextPayload| {
+            stdout
+                .set_color(&assistant_color)
+                .whatever_context("set_color")?;
+            writeln!(&mut stdout, "{}", payload.content).whatever_context("writeln")?;
+            writeln!(&mut stdout).whatever_context("writeln")?;
+            Ok(())
+        };
 
-        loop {
-            event!(Level::TRACE, "history = {:?}", history);
+        agent_loop(server, history.clone(), text_handler, &tool_handler).await?;
+    };
 
-            let results = server
-                .complete(history.clone(), &tools)
-                .await
-                .whatever_context("complete")?;
+    tool_handler.shutdown().await?;
 
-            let mut tool_called = false;
+    main_result
+}
 
-            for msg in results {
-                event!(Level::DEBUG, "msg = {:?}", msg);
+async fn agent_loop<S, H, F>(
+    server: &S,
+    history: Rc<H>,
+    mut text_handler: F,
+    tool_handler: &(impl ToolHandler + Send + Sync),
+) -> Result<()>
+where
+    S: ChatServer,
+    H: ChatHistory + std::fmt::Debug,
+    F: FnMut(TextPayload) -> Result<()>,
+{
+    let tools = tool_handler.get_tools();
 
-                if match msg {
+    loop {
+        event!(Level::TRACE, "history = {:?}", history);
+
+        let results = server
+            .complete(history.clone(), &tools)
+            .await
+            .whatever_context("complete")?;
+
+        let mut tool_called = false;
+
+        // Usually there's only one result.
+        // If there are multiple, they will almost certainly be tool
+        // calls.
+        for msg in results {
+            event!(Level::DEBUG, "msg = {:?}", msg);
+
+            // Once true, tool_called should always be true... until we run
+            // through the model again (above).
+            tool_called = tool_called
+                || match msg {
                     Message::Text(payload) => {
-                        stdout
-                            .set_color(&assistant_color)
-                            .whatever_context("set_color")?;
-                        writeln!(&mut stdout, "{}", payload.content).whatever_context("writeln")?;
-                        writeln!(&mut stdout).whatever_context("writeln")?;
-                        false
+                        text_handler(payload)?;
+                        false // Not a tool call
                     }
                     Message::FunctionCall(payload) => {
                         event!(Level::DEBUG, "payload = {:?}", payload);
@@ -117,26 +148,19 @@ where
                         history
                             .clone()
                             .add_message(FunctionCallResult(call_result))?;
-                        true
+                        true // Is a tool call
                     }
                     Message::FunctionCallResult(_) => {
                         panic!()
                     }
-                } {
-                    tool_called = true;
-                }
-            }
-
-            // If tools were called, then history was surely altered.
-            // Re-run through the model.
-            if !tool_called {
-                // Otherwise, wait for the next user input
-                break;
-            }
+                };
         }
-    };
 
-    tool_handler.shutdown().await?;
-
-    main_result
+        // If tools were called, then history was surely altered.
+        // Re-run through the model.
+        if !tool_called {
+            // Otherwise, wait for the next user input
+            break Ok(());
+        }
+    }
 }
