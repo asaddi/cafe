@@ -10,6 +10,7 @@ use snafu::ResultExt;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
+use crate::chat::ChatSession;
 use crate::prompt::{BasicSystemPrompt, CharaSystemPrompt, SystemPromptSource};
 use crate::tools::{McpToolHandler, ToolDispatcher, ToolHandler};
 use crate::ui::main_loop;
@@ -17,6 +18,7 @@ use crate::ui::main_loop;
 mod chat;
 mod config;
 mod prompt;
+mod storage;
 mod tools;
 mod ui;
 
@@ -118,7 +120,6 @@ async fn main() -> Result<()> {
     );
 
     println!("{header}");
-    println!();
 
     let server = chat::OpenAICompatChatServer::builder()
         .base_url(args.base_url)
@@ -126,7 +127,11 @@ async fn main() -> Result<()> {
         .model(args.model)
         .build();
 
+    // TODO Going to have to move session handling further inward.
     let history = chat::OpenAICompatChatHistory::new();
+
+    println!("session = {}", history.get_id());
+    println!();
 
     // TODO maybe use a builder to make this cleaner
     let mut extra_handlers: Vec<Box<dyn ToolHandler + Send + Sync>> = Vec::new();

@@ -11,11 +11,12 @@ use tracing::{Level, event};
 use crate::{
     Result,
     chat::{
-        ChatHistory, ChatServer, FunctionCallResultPayload,
+        ChatHistory, ChatServer, ChatSession, FunctionCallResultPayload,
         Message::{self, FunctionCallResult},
         TextPayload,
     },
     prompt::SystemPromptSource,
+    storage::{ChatStorage, DefaultChatStorage},
     tools::ToolHandler,
 };
 
@@ -28,10 +29,11 @@ pub async fn main_loop<S, H>(
 ) -> Result<()>
 where
     S: ChatServer,
-    H: ChatHistory + std::fmt::Debug,
+    H: ChatHistory + ChatSession + std::fmt::Debug,
 {
     let server = &server;
     let history = Rc::new(history);
+    let storage = DefaultChatStorage;
 
     // TODO notion of user's identity/persona
     let sys_prompt = sys_prompt_source.generate_system_prompt(username.unwrap_or("User"))?;
@@ -60,6 +62,7 @@ where
             .whatever_context("read_line")?;
 
         if len == 0 {
+            storage.save(history.clone())?;
             break Ok(());
         }
 

@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use snafu::{FromString, Whatever, prelude::*};
 use tracing::{Level, event};
+use uuid::Uuid;
 
 use crate::chat::Message::FunctionCall;
 use crate::tools::ToolDefinition;
@@ -23,6 +24,12 @@ pub trait ChatServer {
         messages: Rc<dyn ChatHistory>,
         tools: &[ToolDefinition],
     ) -> Result<Vec<Message>>;
+}
+
+pub trait ChatSession {
+    fn get_id(&self) -> String;
+    fn get_json(&self) -> Vec<Value>;
+    fn needs_saving(&self) -> bool;
 }
 
 #[derive(Debug, Clone)]
@@ -111,12 +118,14 @@ impl OpenAICompatChatServer {
 
 #[derive(Debug)]
 pub struct OpenAICompatChatHistory {
+    id: Uuid,
     messages: RefCell<Vec<Value>>,
 }
 
 impl OpenAICompatChatHistory {
     pub fn new() -> Self {
         Self {
+            id: Uuid::now_v7(),
             messages: RefCell::new(Vec::new()),
         }
     }
@@ -146,6 +155,22 @@ impl ChatHistory for OpenAICompatChatHistory {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+impl ChatSession for OpenAICompatChatHistory {
+    fn get_id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn get_json(&self) -> Vec<Value> {
+        self.messages.borrow().clone()
+    }
+
+    fn needs_saving(&self) -> bool {
+        // FIXME this is just a placeholder.
+        // We assume there's only a system message when the session is fresh/new.
+        self.messages.borrow().len() > 1
     }
 }
 
