@@ -10,7 +10,6 @@ use snafu::ResultExt;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::chat::ChatSession;
 use crate::prompt::{BasicSystemPrompt, CharaSystemPrompt, SystemPromptSource};
 use crate::tools::{McpToolHandler, ToolDispatcher, ToolHandler};
 use crate::ui::main_loop;
@@ -94,28 +93,24 @@ async fn main() -> Result<()> {
     let config_path = crate::get_project_dirs().config_dir().join("config.toml");
     let config = config::Config::load(&config_path)?;
 
-    let mut header = format!(
-        "cafe v{}, model = {}, chara = ",
-        env!("CARGO_PKG_VERSION"),
-        args.model
-    );
+    let mut header = format!("cafe v{} | chara = ", env!("CARGO_PKG_VERSION"));
 
     let sys_prompt_source: Box<dyn SystemPromptSource> = if let Some(chara) = args.chara {
         let mut chara_prompt = CharaSystemPrompt::new(&config);
         let chara_base = chara.clone();
         let chara_base = chara_base.file_name().unwrap().display();
         chara_prompt.load_card(chara)?;
-        let _ = write!(header, "{chara_base}, "); // Is this really infallible?
+        let _ = write!(header, "{chara_base}"); // Is this really infallible?
         Box::new(chara_prompt)
     } else {
-        let _ = write!(header, "none, ");
+        let _ = write!(header, "none");
         Box::new(BasicSystemPrompt::new(&config))
     };
 
     let username = args.persona.or_else(|| config.persona.clone());
     let _ = write!(
         header,
-        "persona = {}",
+        "| persona = {}",
         username.clone().unwrap_or("none".to_owned())
     );
 
@@ -127,10 +122,6 @@ async fn main() -> Result<()> {
         .model(args.model)
         .build();
 
-    // TODO Going to have to move session handling further inward.
-    let history = chat::OpenAICompatChatHistory::new();
-
-    println!("session = {}", history.get_id());
     println!();
 
     // TODO maybe use a builder to make this cleaner
@@ -168,12 +159,5 @@ async fn main() -> Result<()> {
     }
     println!();
 
-    main_loop(
-        server,
-        history,
-        tools,
-        sys_prompt_source,
-        username.as_deref(),
-    )
-    .await
+    main_loop(server, tools, sys_prompt_source, username.as_deref()).await
 }

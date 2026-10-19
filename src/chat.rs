@@ -19,14 +19,16 @@ pub trait ChatHistory: Any {
 }
 
 pub trait ChatServer {
-    async fn complete(
-        &self,
-        messages: Rc<dyn ChatHistory>,
-        tools: &[ToolDefinition],
-    ) -> Result<Vec<Message>>;
+    async fn complete<H>(&self, messages: Rc<H>, tools: &[ToolDefinition]) -> Result<Vec<Message>>
+    where
+        H: ChatSession + ?Sized;
+
+    fn get_model(&self) -> String;
+
+    fn create_session(&self) -> Rc<dyn ChatSession>;
 }
 
-pub trait ChatSession {
+pub trait ChatSession: ChatHistory + std::fmt::Debug {
     fn get_id(&self) -> String;
     fn get_json(&self) -> Vec<Value>;
     fn needs_saving(&self) -> bool;
@@ -197,11 +199,10 @@ mod responses {
 }
 
 impl ChatServer for OpenAICompatChatServer {
-    async fn complete(
-        &self,
-        messages: Rc<dyn ChatHistory>,
-        tools: &[ToolDefinition],
-    ) -> Result<Vec<Message>> {
+    async fn complete<H>(&self, messages: Rc<H>, tools: &[ToolDefinition]) -> Result<Vec<Message>>
+    where
+        H: ChatSession + ?Sized,
+    {
         let my_hist = messages
             .as_any()
             .downcast_ref::<OpenAICompatChatHistory>()
@@ -270,5 +271,14 @@ impl ChatServer for OpenAICompatChatServer {
                 content: decoded.content,
             })])
         }
+    }
+
+    fn get_model(&self) -> String {
+        self.model.clone()
+    }
+
+    fn create_session(&self) -> Rc<dyn ChatSession> {
+        let session = OpenAICompatChatHistory::new();
+        Rc::new(session)
     }
 }

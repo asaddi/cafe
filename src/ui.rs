@@ -4,35 +4,39 @@ use std::{
 };
 
 use serde_json::json;
-use snafu::ResultExt;
+use snafu::{FromString, ResultExt, Whatever};
 use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 use tracing::{Level, event};
 
 use crate::{
     Result,
     chat::{
-        ChatHistory, ChatServer, ChatSession, FunctionCallResultPayload,
+        ChatServer, ChatSession, FunctionCallResultPayload,
         Message::{self, FunctionCallResult},
         TextPayload,
     },
     prompt::SystemPromptSource,
     storage::{ChatStorage, DefaultChatStorage},
     tools::ToolHandler,
+    ui::SlashCommand::{NewSession, Quit},
 };
 
-pub async fn main_loop<S, H>(
+enum SlashCommand {
+    Quit,
+    NewSession,
+}
+
+pub async fn main_loop<S>(
     server: S,
-    history: H,
     mut tool_handler: impl ToolHandler + Send + Sync,
     sys_prompt_source: Box<dyn SystemPromptSource>,
     username: Option<&str>,
 ) -> Result<()>
 where
     S: ChatServer,
-    H: ChatHistory + ChatSession + std::fmt::Debug,
 {
     let server = &server;
-    let history = Rc::new(history);
+    let mut history = server.create_session();
     let storage = DefaultChatStorage;
 
     // TODO notion of user's identity/persona
@@ -48,10 +52,19 @@ where
     }
 
     let assistant_color = ColorSpec::new().set_fg(Some(Color::Yellow)).to_owned();
+    let error_color = ColorSpec::new().set_fg(Some(Color::Red)).to_owned();
+
+    let mut stdout = StandardStream::stdout(termcolor::ColorChoice::Auto);
+    stdout.reset().whatever_context("reset")?;
+    writeln!(
+        &mut stdout,
+        "model = {} | session = {}",
+        server.get_model(),
+        history.get_id()
+    )
+    .whatever_context("write")?;
 
     let main_result = loop {
-        let mut stdout = StandardStream::stdout(termcolor::ColorChoice::Auto);
-
         stdout.reset().whatever_context("reset")?;
         write!(&mut stdout, "§ ").whatever_context("write")?;
         stdout.flush().whatever_context("flush")?;
@@ -62,13 +75,40 @@ where
             .whatever_context("read_line")?;
 
         if len == 0 {
-            storage.save(history.clone())?;
             break Ok(());
         }
 
         let input = input.trim();
 
         if input.is_empty() {
+            continue;
+        }
+
+        if let Some(input) = input.strip_prefix('/') {
+            match parse_slash_command(input) {
+                Ok(cmd) => match cmd {
+                    Quit => break Ok(()),
+                    NewSession => {
+                        storage.save(history.clone())?;
+                        history = server.create_session();
+                        // FIXME refactor
+                        stdout.reset().whatever_context("reset")?;
+                        writeln!(
+                            &mut stdout,
+                            "model = {} | session = {}",
+                            server.get_model(),
+                            history.get_id()
+                        )
+                        .whatever_context("write")?;
+                    }
+                },
+                Err(e) => {
+                    stdout
+                        .set_color(&error_color)
+                        .whatever_context("set_color")?;
+                    writeln!(&mut stdout, "{e}").whatever_context("writeln")?;
+                }
+            }
             continue;
         }
 
@@ -91,6 +131,8 @@ where
         agent_loop(server, history.clone(), text_handler, &tool_handler).await?;
     };
 
+    storage.save(history.clone())?;
+
     tool_handler.shutdown().await?;
 
     main_result
@@ -104,7 +146,7 @@ async fn agent_loop<S, H, F>(
 ) -> Result<()>
 where
     S: ChatServer,
-    H: ChatHistory + std::fmt::Debug,
+    H: ChatSession + ?Sized,
     F: FnMut(TextPayload) -> Result<()>,
 {
     let tools = tool_handler.get_tools();
@@ -165,5 +207,15 @@ where
             // Otherwise, wait for the next user input
             break Ok(());
         }
+    }
+}
+
+fn parse_slash_command(input: &str) -> Result<SlashCommand> {
+    // Nothing fancy for now.
+    // Might be able to leverage clap in the future
+    match input {
+        "bye" | "quit" | "exit" => Ok(SlashCommand::Quit),
+        "new" => Ok(SlashCommand::NewSession),
+        _ => Err(Whatever::without_source("unknown slash command".to_owned())),
     }
 }
