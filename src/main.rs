@@ -110,7 +110,7 @@ async fn main() -> Result<()> {
     let username = args.persona.or_else(|| config.persona.clone());
     let _ = write!(
         header,
-        "| persona = {}",
+        " | persona = {}",
         username.clone().unwrap_or("none".to_owned())
     );
 
