@@ -131,7 +131,12 @@ where
         agent_loop(server, history.clone(), text_handler, &tool_handler).await?;
     };
 
-    storage.save(history.clone())?;
+    if storage.save(history.clone())? {
+        writeln!(&mut stdout, "\n").whatever_context("writeln")?;
+        // TODO we should probably truncate session IDs (for display)
+        writeln!(&mut stdout, "Session saved: {}\n", history.get_id())
+            .whatever_context("writeln")?;
+    }
 
     tool_handler.shutdown().await?;
 

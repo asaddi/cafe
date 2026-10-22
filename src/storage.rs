@@ -6,13 +6,13 @@ use tracing::{Level, event};
 use crate::{Result, chat::ChatSession};
 
 pub trait ChatStorage {
-    fn save(&self, session: Rc<dyn ChatSession>) -> Result<()>;
+    fn save(&self, session: Rc<dyn ChatSession>) -> Result<bool>;
 }
 
 pub struct DefaultChatStorage;
 
 impl ChatStorage for DefaultChatStorage {
-    fn save(&self, session: Rc<dyn ChatSession>) -> Result<()> {
+    fn save(&self, session: Rc<dyn ChatSession>) -> Result<bool> {
         let storage_dir = crate::get_project_dirs().data_dir().join("sessions");
         fs::create_dir_all(&storage_dir).with_whatever_context(|_| {
             format!(
@@ -41,13 +41,14 @@ impl ChatStorage for DefaultChatStorage {
                     format!("writing file {}", session_name.display())
                 })?;
             }
+            Ok(true)
         } else {
             event!(
                 Level::TRACE,
                 "session {} is empty; not saving",
                 session.get_id()
             );
+            Ok(false)
         }
-        Ok(())
     }
 }
