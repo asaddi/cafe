@@ -13,7 +13,7 @@ use rmcp::{
 };
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use snafu::ResultExt;
 use tracing::{Level, event};
 
@@ -203,9 +203,12 @@ impl ToolHandler for BuiltinTools {
         vec![
             ToolDefinition::builder()
                 .name("roll_dice")
-                .description("Roll a number of dice (with the specified number of faces), returning the total result.")
+                .description(
+                    "Roll a number of dice (with the specified number of faces), \
+                        returning the results of each individual roll as well as the total.",
+                )
                 .parameters(schema_for!(RollDiceParams).into())
-                .build()
+                .build(),
         ]
     }
 
@@ -225,11 +228,14 @@ impl ToolHandler for BuiltinTools {
 
                 let mut total: u64 = 0;
 
+                let mut results: Vec<u64> = Vec::new();
                 for _ in 0..args.number {
-                    total += rand::random_range(1..=args.faces);
+                    let roll = rand::random_range(1..=args.faces);
+                    results.push(roll);
+                    total = total.saturating_add(roll);
                 }
 
-                format!("{total}")
+                json!({"results": results, "total": total}).to_string()
             }
             _ => {
                 unimplemented!("tool: {name}");
